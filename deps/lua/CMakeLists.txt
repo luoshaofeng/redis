@@ -37,6 +37,6 @@ set(LUA_SRC
         src/llex.c
         src/ltm.c
         src/ldo.c
-)
+        )
 
 add_library(lua STATIC ${LUA_SRC})

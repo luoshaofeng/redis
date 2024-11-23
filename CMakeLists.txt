@@ -1,23 +1,24 @@
 cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
 project(redis VERSION 6.0)
+
 if (NOT CMAKE_BUILD_TYPE)
     message(STATUS "No build type defined; defaulting to 'Debug'")
     set(CMAKE_BUILD_TYPE "Debug" CACHE STRING
-            "The type of build. Possible values are: Debug, Release,
-RelWithDebInfo and MinSizeRel.")
+            "The type of build. Possible values are: Debug, Release, RelWithDebInfo and MinSizeRel.")
 endif()
 
-message(STATUS "Host is: ${CMAKE_HOST_SYSTEM}. Build target is:
-${CMAKE_SYSTEM}")
+message(STATUS "Host is: ${CMAKE_HOST_SYSTEM}.  Build target is: ${CMAKE_SYSTEM}")
 get_filename_component(REDIS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}" ABSOLUTE)
 message(STATUS "Project root directory is: ${REDIS_ROOT}")
+
 # Just for debugging when handling a new platform.
 if (false)
     message("C++ compiler supports these language features:")
     foreach(i ${CMAKE_CXX_COMPILE_FEATURES})
-        message(" ${i}")
+        message("  ${i}")
     endforeach()
 endif()
+
 message(STATUS "Generating release.h...")
 execute_process(
         COMMAND sh -c ./mkreleasehdr.sh
@@ -26,6 +27,7 @@ execute_process(
 
 add_subdirectory(deps)
 add_subdirectory(src/modules)
+
 set(SRC_SERVER_TMP
         src/crcspeed.c
         src/crcspeed.h
@@ -109,47 +111,53 @@ set(SRC_SERVER_TMP
         src/listpack.c
         src/localtime.c
         src/gopher.c
-)
+        )
+
 set(SRC_SERVER src/server.c ${SRC_SERVER_TMP})
 
 set(SRC_CLI
-        src/anet.c src/sds.c src/adlist.c src/redis-cli.c src/zmalloc.c
-        src/release.c src/anet.c src/ae.c src/crc64.c
-)
+        src/anet.c src/sds.c src/adlist.c src/redis-cli.c src/zmalloc.c src/release.c src/anet.c src/ae.c src/crc64.c
+        )
 if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     # better not to work with jemalloc
 endif()
 
 add_executable(redis-server ${SRC_SERVER})
 add_executable(redis-cli ${SRC_CLI})
+
 set_property(TARGET redis-server PROPERTY C_STANDARD 99)
 set_property(TARGET redis-server PROPERTY CXX_STANDARD 11)
 set_property(TARGET redis-server PROPERTY CXX_STANDARD_REQUIRED ON)
+
 set_property(TARGET redis-cli PROPERTY C_STANDARD 99)
 set_property(TARGET redis-cli PROPERTY CXX_STANDARD 11)
 set_property(TARGET redis-cli PROPERTY CXX_STANDARD_REQUIRED ON)
+
 target_include_directories(redis-server
         PRIVATE ${REDIS_ROOT}/deps/hiredis
         PRIVATE ${REDIS_ROOT}/deps/linenoise
         PRIVATE ${REDIS_ROOT}/deps/lua/src
-)
+        )
+
 target_include_directories(redis-cli
         PRIVATE ${REDIS_ROOT}/deps/hiredis
         PRIVATE ${REDIS_ROOT}/deps/linenoise
         PRIVATE ${REDIS_ROOT}/deps/lua/src
-)
+        )
+
 target_link_libraries(redis-server
         PRIVATE pthread
         PRIVATE m
         PRIVATE lua
         PRIVATE linenoise
         PRIVATE hiredis
-)
+        )
+
 target_link_libraries(redis-cli
         PRIVATE pthread
         PRIVATE m
         PRIVATE linenoise
         PRIVATE hiredis
-)
+        )
 
 link_directories(deps/hiredis/ deps/linenoise/ diredeps/lua/src)
