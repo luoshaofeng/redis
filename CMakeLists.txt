@@ -117,12 +117,14 @@ set(SRC_SERVER src/server.c ${SRC_SERVER_TMP})
 
 set(SRC_CLI
         src/anet.c src/sds.c src/adlist.c src/redis-cli.c src/zmalloc.c src/release.c src/anet.c src/ae.c src/crc64.c
-        )
+        src/mt19937-64.c
+)
 if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     # better not to work with jemalloc
 endif()
 
-add_executable(redis-server ${SRC_SERVER})
+add_executable(redis-server ${SRC_SERVER}
+        src/mt19937-64.c)
 add_executable(redis-cli ${SRC_CLI})
 
 set_property(TARGET redis-server PROPERTY C_STANDARD 99)
