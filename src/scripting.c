@@ -1115,7 +1115,7 @@ void scriptingEnableGlobalsProtection(lua_State *lua) {
  *
  * However it is simpler to just call scriptingReset() that does just that. */
 void scriptingInit(int setup) {
-    lua_State *lua = lua_open();
+    lua_State *lua = lua_open();    //lua结构体
 
     if (setup) {
         server.lua_client = NULL;

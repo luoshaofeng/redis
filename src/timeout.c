@@ -134,23 +134,23 @@ void removeClientFromTimeoutTable(client *c) {
 /* This function is called in beforeSleep() in order to unblock clients
  * that are waiting in blocking operations with a timeout set. */
 void handleBlockedClientsTimeout(void) {
-    if (raxSize(server.clients_timeout_table) == 0) return;
-    uint64_t now = mstime();
-    raxIterator ri;
+    if (raxSize(server.clients_timeout_table) == 0) return;     //没有阻塞的客户端直接返回
+    uint64_t now = mstime();    //返回当前时间
+    raxIterator ri;     //树根迭代器
     raxStart(&ri,server.clients_timeout_table);
-    raxSeek(&ri,"^",NULL,0);
+    raxSeek(&ri,"^",NULL,0);        //指定元素处寻找迭代器
 
     while(raxNext(&ri)) {
         uint64_t timeout;
         client *c;
-        decodeTimeoutKey(ri.key,&timeout,&c);
-        if (timeout >= now) break; /* All the timeouts are in the future. */
-        c->flags &= ~CLIENT_IN_TO_TABLE;
+        decodeTimeoutKey(ri.key,&timeout,&c);   //读取超时时间
+        if (timeout >= now) break; /* 还没到超时时间 All the timeouts are in the future. */
+        c->flags &= ~CLIENT_IN_TO_TABLE;    //去出超时标识
         checkBlockedClientTimeout(c,now);
-        raxRemove(server.clients_timeout_table,ri.key,ri.key_len,NULL);
+        raxRemove(server.clients_timeout_table,ri.key,ri.key_len,NULL); //从树里面移除
         raxSeek(&ri,"^",NULL,0);
     }
-    raxStop(&ri);
+    raxStop(&ri);       //释放迭代器
 }
 
 /* Get a timeout value from an object and store it into 'timeout'.

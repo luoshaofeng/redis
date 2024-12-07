@@ -7545,7 +7545,7 @@ void moduleInitModulesSystem(void) {
     moduleCommandFilters = listCreate();
 
     moduleRegisterCoreAPI();
-    if (pipe(server.module_blocked_pipe) == -1) {
+    if (pipe(server.module_blocked_pipe) == -1) {   //创建管道
         serverLog(LL_WARNING,
             "Can't create the pipe for module blocking commands: %s",
             strerror(errno));
@@ -7581,7 +7581,7 @@ void moduleLoadFromQueue(void) {
     listNode *ln;
 
     listRewind(server.loadmodule_queue,&li);
-    while((ln = listNext(&li))) {
+    while((ln = listNext(&li))) {   //遍历server.loadmodule_queue
         struct moduleLoadQueueEntry *loadmod = ln->value;
         if (moduleLoad(loadmod->path,(void **)loadmod->argv,loadmod->argc)
             == C_ERR)

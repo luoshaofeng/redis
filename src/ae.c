@@ -81,7 +81,7 @@ aeEventLoop *aeCreateEventLoop(int setsize) {
     /* Events with mask == AE_NONE are not set. So let's initialize the
      * vector with it. */
     for (i = 0; i < setsize; i++)
-        eventLoop->events[i].mask = AE_NONE;
+        eventLoop->events[i].mask = AE_NONE;  //设置事件状态
     return eventLoop;
 
 err:
@@ -159,7 +159,7 @@ int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask,
     }
     aeFileEvent *fe = &eventLoop->events[fd];
 
-    if (aeApiAddEvent(eventLoop, fd, mask) == -1)
+    if (aeApiAddEvent(eventLoop, fd, mask) == -1)   // 根据mask添加读写文件描述符
         return AE_ERR;
     fe->mask |= mask;
     if (mask & AE_READABLE) fe->rfileProc = proc;
@@ -232,8 +232,8 @@ long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
     te = zmalloc(sizeof(*te));
     if (te == NULL) return AE_ERR;
     te->id = id;
-    aeAddMillisecondsToNow(milliseconds,&te->when_sec,&te->when_ms);
-    te->timeProc = proc;
+    aeAddMillisecondsToNow(milliseconds,&te->when_sec,&te->when_ms);//添加milliseconds到当前时间
+    te->timeProc = proc;    //时间事件处理程序
     te->finalizerProc = finalizerProc;
     te->clientData = clientData;
     te->prev = NULL;
@@ -241,7 +241,7 @@ long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
     te->refcount = 0;
     if (te->next)
         te->next->prev = te;
-    eventLoop->timeEventHead = te;
+    eventLoop->timeEventHead = te;  //插入到事件处理器队头
     return id;
 }
 
@@ -269,7 +269,7 @@ int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id)
  *    Much better but still insertion or deletion of timers is O(N).
  * 2) Use a skiplist to have this operation as O(1) and insertion as O(log(N)).
  */
-static aeTimeEvent *aeSearchNearestTimer(aeEventLoop *eventLoop)
+static aeTimeEvent *aeSearchNearestTimer(aeEventLoop *eventLoop)    //查找最近的定时器
 {
     aeTimeEvent *te = eventLoop->timeEventHead;
     aeTimeEvent *nearest = NULL;
@@ -405,14 +405,14 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
         if (shortest) {
             long now_sec, now_ms;
 
-            aeGetTime(&now_sec, &now_ms);
+            aeGetTime(&now_sec, &now_ms);   //加载当前系统的时间
             tvp = &tv;
 
             /* How many milliseconds we need to wait for the next
              * time event to fire? */
             long long ms =
                 (shortest->when_sec - now_sec)*1000 +
-                shortest->when_ms - now_ms;
+                shortest->when_ms - now_ms;     //提取ms时间
 
             if (ms > 0) {
                 tvp->tv_sec = ms/1000;
@@ -444,7 +444,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
 
         /* Call the multiplexing API, will return only on timeout or when
          * some event fires. */
-        numevents = aeApiPoll(eventLoop, tvp);
+        numevents = aeApiPoll(eventLoop, tvp);      // 调用select读取文件描述符信息
 
         /* After sleep callback. */
         if (eventLoop->aftersleep != NULL && flags & AE_CALL_AFTER_SLEEP)

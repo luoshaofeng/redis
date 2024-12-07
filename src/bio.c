@@ -92,7 +92,7 @@ void lazyfreeFreeSlotsMapFromBioThread(zskiplist *sl);
  * main thread. */
 #define REDIS_THREAD_STACK_SIZE (1024*1024*4)
 
-/* Initialize the background system, spawning the thread. */
+/* 初始化后台线程 Initialize the background system, spawning the thread. */
 void bioInit(void) {
     pthread_attr_t attr;
     pthread_t thread;
@@ -100,11 +100,11 @@ void bioInit(void) {
     int j;
 
     /* Initialization of state vars and objects */
-    for (j = 0; j < BIO_NUM_OPS; j++) {
-        pthread_mutex_init(&bio_mutex[j],NULL);
-        pthread_cond_init(&bio_newjob_cond[j],NULL);
-        pthread_cond_init(&bio_step_cond[j],NULL);
-        bio_jobs[j] = listCreate();
+    for (j = 0; j < BIO_NUM_OPS; j++) {     //初始化bio
+        pthread_mutex_init(&bio_mutex[j],NULL); //初始化线程锁
+        pthread_cond_init(&bio_newjob_cond[j],NULL);    //初始化条件变量
+        pthread_cond_init(&bio_step_cond[j],NULL);  //初始化条件变量
+        bio_jobs[j] = listCreate();     //创建队列
         bio_pending[j] = 0;
     }
 
@@ -120,7 +120,7 @@ void bioInit(void) {
      * responsible of. */
     for (j = 0; j < BIO_NUM_OPS; j++) {
         void *arg = (void*)(unsigned long) j;
-        if (pthread_create(&thread,&attr,bioProcessBackgroundJobs,arg) != 0) {
+        if (pthread_create(&thread,&attr,bioProcessBackgroundJobs,arg) != 0) {  //创建后台线程,卡住并等待唤醒
             serverLog(LL_WARNING,"Fatal: Can't initialize Background Jobs.");
             exit(1);
         }
@@ -154,7 +154,7 @@ void *bioProcessBackgroundJobs(void *arg) {
         return NULL;
     }
 
-    switch (type) {
+    switch (type) { //给线程命名
     case BIO_CLOSE_FILE:
         redis_set_thread_title("bio_close_file");
         break;
@@ -166,16 +166,16 @@ void *bioProcessBackgroundJobs(void *arg) {
         break;
     }
 
-    redisSetCpuAffinity(server.bio_cpulist);
+    redisSetCpuAffinity(server.bio_cpulist);    //设置cpu亲和性
 
-    makeThreadKillable();
+    makeThreadKillable();       //设置线程是可关闭的
 
-    pthread_mutex_lock(&bio_mutex[type]);
+    pthread_mutex_lock(&bio_mutex[type]);       //加锁
     /* Block SIGALRM so we are sure that only the main thread will
      * receive the watchdog signal. */
     sigemptyset(&sigset);
-    sigaddset(&sigset, SIGALRM);
-    if (pthread_sigmask(SIG_BLOCK, &sigset, NULL))
+    sigaddset(&sigset, SIGALRM);        //添加信号
+    if (pthread_sigmask(SIG_BLOCK, &sigset, NULL))      //添加SIGALRM信号屏蔽字
         serverLog(LL_WARNING,
             "Warning: can't mask SIGALRM in bio.c thread: %s", strerror(errno));
 
@@ -184,15 +184,15 @@ void *bioProcessBackgroundJobs(void *arg) {
 
         /* The loop always starts with the lock hold. */
         if (listLength(bio_jobs[type]) == 0) {
-            pthread_cond_wait(&bio_newjob_cond[type],&bio_mutex[type]);
+            pthread_cond_wait(&bio_newjob_cond[type],&bio_mutex[type]);     //卡住等待唤醒
             continue;
         }
         /* Pop the job from the queue. */
-        ln = listFirst(bio_jobs[type]);
+        ln = listFirst(bio_jobs[type]);     //取bio队头
         job = ln->value;
         /* It is now possible to unlock the background system as we know have
          * a stand alone job structure to process.*/
-        pthread_mutex_unlock(&bio_mutex[type]);
+        pthread_mutex_unlock(&bio_mutex[type]); //解锁
 
         /* Process the job accordingly to its type. */
         if (type == BIO_CLOSE_FILE) {

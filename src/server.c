@@ -2109,12 +2109,12 @@ extern int ProcessingEventsWhileBlocked;
  *
  * The most important is freeClientsInAsyncFreeQueue but we also
  * call some other low-risk functions. */
-void beforeSleep(struct aeEventLoop *eventLoop) {
+void beforeSleep(struct aeEventLoop *eventLoop) {//两个函数调用：aeMain，processEventsWhileBlocked-在RDB/AOF加载期间处理客户端
     UNUSED(eventLoop);
 
-    size_t zmalloc_used = zmalloc_used_memory();
+    size_t zmalloc_used = zmalloc_used_memory();    //加载used_memory
     if (zmalloc_used > server.stat_peak_memory)
-        server.stat_peak_memory = zmalloc_used;
+        server.stat_peak_memory = zmalloc_used; // 更新最大内存
 
     /* Just call a subset of vital functions in case we are re-entering
      * the event loop from processEventsWhileBlocked(). Note that in this
@@ -2132,7 +2132,7 @@ void beforeSleep(struct aeEventLoop *eventLoop) {
     }
 
     /* Handle precise timeouts of blocked clients. */
-    handleBlockedClientsTimeout();
+    handleBlockedClientsTimeout();  //处理超时的客户端
 
     /* We should handle pending reads clients ASAP after event loop. */
     handleClientsWithPendingReadsUsingThreads();
@@ -2345,7 +2345,7 @@ void createSharedObjects(void) {
 void initServerConfig(void) {
     int j;
 
-    updateCachedTime(1);
+    updateCachedTime(1);       // 缓存当前时间
     getRandomHexChars(server.runid,CONFIG_RUN_ID_SIZE);
     server.runid[CONFIG_RUN_ID_SIZE] = '\0';
     changeReplicationId();
@@ -2718,13 +2718,13 @@ int listenToPort(int port, int *fds, int *count) {
     /* Force binding of 0.0.0.0 if no bind address is specified, always
      * entering the loop if j == 0. */
     if (server.bindaddr_count == 0) server.bindaddr[0] = NULL;
-    for (j = 0; j < server.bindaddr_count || j == 0; j++) {
+    for (j = 0; j < server.bindaddr_count || j == 0; j++) {     // 建立连接监听
         if (server.bindaddr[j] == NULL) {
             int unsupported = 0;
             /* Bind * for both IPv6 and IPv4, we enter here only if
              * server.bindaddr_count == 0. */
             fds[*count] = anetTcp6Server(server.neterr,port,NULL,
-                server.tcp_backlog);
+                server.tcp_backlog);    //建立TCP连接（监听），保存文件描述符
             if (fds[*count] != ANET_ERR) {
                 anetNonBlock(NULL,fds[*count]);
                 (*count)++;
@@ -2822,17 +2822,17 @@ void resetServerStats(void) {
 /* Make the thread killable at any time, so that kill threads functions
  * can work reliably (default cancelability type is PTHREAD_CANCEL_DEFERRED).
  * Needed for pthread_cancel used by the fast memory test used by the crash report. */
-void makeThreadKillable(void) {
-    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+void makeThreadKillable(void) { //设置线程是可关闭的
+    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);    //收到cancel信号后设置为cancel状态
     pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 }
 
 void initServer(void) {
     int j;
 
-    signal(SIGHUP, SIG_IGN);
+    signal(SIGHUP, SIG_IGN);        //忽略信息
     signal(SIGPIPE, SIG_IGN);
-    setupSignalHandlers();
+    setupSignalHandlers();      //设置信号处理
     makeThreadKillable();
 
     if (server.syslog_enabled) {
@@ -2866,23 +2866,23 @@ void initServer(void) {
     server.system_memory_size = zmalloc_get_memory_size();
 
     if ((server.tls_port || server.tls_replication || server.tls_cluster)
-                && tlsConfigure(&server.tls_ctx_config) == C_ERR) {
+                && tlsConfigure(&server.tls_ctx_config) == C_ERR) { //检查tls配置
         serverLog(LL_WARNING, "Failed to configure TLS. Check logs for more info.");
         exit(1);
     }
 
-    createSharedObjects();
+    createSharedObjects();  //创建shared结构体
     adjustOpenFilesLimit();
-    server.el = aeCreateEventLoop(server.maxclients+CONFIG_FDSET_INCR);
+    server.el = aeCreateEventLoop(server.maxclients+CONFIG_FDSET_INCR); //创建事件循环器
     if (server.el == NULL) {
         serverLog(LL_WARNING,
             "Failed creating the event loop. Error message: '%s'",
             strerror(errno));
         exit(1);
     }
-    server.db = zmalloc(sizeof(redisDb)*server.dbnum);
+    server.db = zmalloc(sizeof(redisDb)*server.dbnum);  // 创建数据库
 
-    /* Open the TCP listening socket for the user commands. */
+    /* Open the TCP listening socket for the user commands. 监听端口 */
     if (server.port != 0 &&
         listenToPort(server.port,server.ipfd,&server.ipfd_count) == C_ERR)
         exit(1);
@@ -2909,7 +2909,7 @@ void initServer(void) {
     }
 
     /* Create the Redis databases, and initialize other internal state. */
-    for (j = 0; j < server.dbnum; j++) {
+    for (j = 0; j < server.dbnum; j++) {    //初始化数据库
         server.db[j].dict = dictCreate(&dbDictType,NULL);
         server.db[j].expires = dictCreate(&keyptrDictType,NULL);
         server.db[j].expires_cursor = 0;
@@ -2921,10 +2921,10 @@ void initServer(void) {
         server.db[j].defrag_later = listCreate();
         listSetFreeMethod(server.db[j].defrag_later,(void (*)(void*))sdsfree);
     }
-    evictionPoolAlloc(); /* Initialize the LRU keys pool. */
-    server.pubsub_channels = dictCreate(&keylistDictType,NULL);
-    server.pubsub_patterns = listCreate();
-    server.pubsub_patterns_dict = dictCreate(&keylistDictType,NULL);
+    evictionPoolAlloc(); /* 初始化池子 Initialize the LRU keys pool. */
+    server.pubsub_channels = dictCreate(&keylistDictType,NULL); //初始化订阅管道
+    server.pubsub_patterns = listCreate();  // 订阅模式
+    server.pubsub_patterns_dict = dictCreate(&keylistDictType,NULL);//订阅模式字典
     listSetFreeMethod(server.pubsub_patterns,freePubsubPattern);
     listSetMatchMethod(server.pubsub_patterns,listMatchPubsubPattern);
     server.cronloops = 0;
@@ -2941,14 +2941,14 @@ void initServer(void) {
     server.child_info_pipe[0] = -1;
     server.child_info_pipe[1] = -1;
     server.child_info_data.magic = 0;
-    aofRewriteBufferReset();
+    aofRewriteBufferReset();    // 初始化aof写缓存
     server.aof_buf = sdsempty();
     server.lastsave = time(NULL); /* At startup we consider the DB saved. */
     server.lastbgsave_try = 0;    /* At startup we never tried to BGSAVE. */
     server.rdb_save_time_last = -1;
     server.rdb_save_time_start = -1;
     server.dirty = 0;
-    resetServerStats();
+    resetServerStats();     //重置服务器状态
     /* A few stats we don't want to reset: server startup time, and peak mem. */
     server.stat_starttime = time(NULL);
     server.stat_peak_memory = 0;
@@ -2969,7 +2969,7 @@ void initServer(void) {
 
     /* Create the timer callback, this is our way to process many background
      * operations incrementally, like clients timeout, eviction of unaccessed
-     * expired keys and so forth. */
+     * expired keys and so forth. */ //创建定时任务
     if (aeCreateTimeEvent(server.el, 1, serverCron, NULL, NULL) == AE_ERR) {
         serverPanic("Can't create event loop timers.");
         exit(1);
@@ -3000,7 +3000,7 @@ void initServer(void) {
     /* Register a readable event for the pipe used to awake the event loop
      * when a blocked client in a module needs attention. */
     if (aeCreateFileEvent(server.el, server.module_blocked_pipe[0], AE_READABLE,
-        moduleBlockedClientPipeReadable,NULL) == AE_ERR) {
+        moduleBlockedClientPipeReadable,NULL) == AE_ERR) {  //设置管道描述符处理函数
             serverPanic(
                 "Error registering the readable event for the module "
                 "blocked clients subsystem.");
@@ -3012,7 +3012,7 @@ void initServer(void) {
     aeSetAfterSleepProc(server.el,afterSleep);
 
     /* Open the AOF file if needed. */
-    if (server.aof_state == AOF_ON) {
+    if (server.aof_state == AOF_ON) {       //AOF打开处理
         server.aof_fd = open(server.aof_filename,
                                O_WRONLY|O_APPEND|O_CREAT,0644);
         if (server.aof_fd == -1) {
@@ -3032,10 +3032,10 @@ void initServer(void) {
         server.maxmemory_policy = MAXMEMORY_NO_EVICTION;
     }
 
-    if (server.cluster_enabled) clusterInit();
-    replicationScriptCacheInit();
+    if (server.cluster_enabled) clusterInit();  // cluster模式开启
+    replicationScriptCacheInit();   //初始化副本脚本缓存
     scriptingInit(1);
-    slowlogInit();
+    slowlogInit();  // 慢sql结构体初始化
     latencyMonitorInit();
 }
 
@@ -3045,9 +3045,9 @@ void initServer(void) {
  * Thread Local Storage initialization collides with dlopen call.
  * see: https://sourceware.org/bugzilla/show_bug.cgi?id=19329 */
 void InitServerLast() {
-    bioInit();
-    initThreadedIO();
-    set_jemalloc_bg_thread(server.jemalloc_bg_thread);
+    bioInit();      //初始化bio后台线程
+    initThreadedIO();       //初始化线程IO
+    set_jemalloc_bg_thread(server.jemalloc_bg_thread);      //设置后台清理脏内存
     server.initial_memory_usage = zmalloc_used_memory();
 }
 
@@ -5347,17 +5347,17 @@ int main(int argc, char **argv) {
 
     uint8_t hashseed[16];
     getRandomBytes(hashseed,sizeof(hashseed));
-    dictSetHashFunctionSeed(hashseed);
-    server.sentinel_mode = checkForSentinelMode(argc,argv);
-    initServerConfig();
+    dictSetHashFunctionSeed(hashseed);      //设置hash函数的hash种子
+    server.sentinel_mode = checkForSentinelMode(argc,argv); //设置是不是sentinel启动的
+    initServerConfig();     // 初始化server结构体
     ACLInit(); /* The ACL subsystem must be initialized ASAP because the
                   basic networking code and client creation depends on it. */
-    moduleInitModulesSystem();
+    moduleInitModulesSystem();      //创建pipe管道
     tlsInit();
 
     /* Store the executable path and arguments in a safe place in order
      * to be able to restart the server later. */
-    server.executable = getAbsolutePath(argv[0]);
+    server.executable = getAbsolutePath(argv[0]);  //保存可执行文件路径，以便重启
     server.exec_argv = zmalloc(sizeof(char*)*(argc+1));
     server.exec_argv[argc] = NULL;
     for (j = 0; j < argc; j++) server.exec_argv[j] = zstrdup(argv[j]);
@@ -5373,14 +5373,14 @@ int main(int argc, char **argv) {
     /* Check if we need to start in redis-check-rdb/aof mode. We just execute
      * the program main. However the program is part of the Redis executable
      * so that we can easily execute an RDB check on loading errors. */
-    if (strstr(argv[0],"redis-check-rdb") != NULL)
+    if (strstr(argv[0],"redis-check-rdb") != NULL)  //检查rdb
         redis_check_rdb_main(argc,argv,NULL);
-    else if (strstr(argv[0],"redis-check-aof") != NULL)
+    else if (strstr(argv[0],"redis-check-aof") != NULL)     //检查aof
         redis_check_aof_main(argc,argv);
 
-    if (argc >= 2) {
+    if (argc >= 2) {    //解析参数
         j = 1; /* First option to parse in argv[] */
-        sds options = sdsempty();
+        sds options = sdsempty();   //创建一个空sds字符串
         char *configfile = NULL;
 
         /* Handle special options --help and --version */
@@ -5446,7 +5446,7 @@ int main(int argc, char **argv) {
 
     server.supervised = redisIsSupervised(server.supervised_mode);
     int background = server.daemonize && !server.supervised;
-    if (background) daemonize();
+    if (background) daemonize();    //判断是否守护进程
 
     serverLog(LL_WARNING, "oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo");
     serverLog(LL_WARNING,
@@ -5464,13 +5464,13 @@ int main(int argc, char **argv) {
     }
 
     readOOMScoreAdj();
-    initServer();
+    initServer();       //初始化server结构体，包括文件描述符的创建
     if (background || server.pidfile) createPidFile();
     redisSetProcTitle(argv[0]);
     redisAsciiArt();
     checkTcpBacklogSettings();
 
-    if (!server.sentinel_mode) {
+    if (!server.sentinel_mode) {    //非sentinel_mode模式
         /* Things not needed when running in Sentinel mode. */
         serverLog(LL_WARNING,"Server initialized");
     #ifdef __linux__
@@ -5494,9 +5494,9 @@ int main(int argc, char **argv) {
     #endif /* __linux__ */
         moduleLoadFromQueue();
         ACLLoadUsersAtStartup();
-        InitServerLast();
-        loadDataFromDisk();
-        if (server.cluster_enabled) {
+        InitServerLast();   //初始化server
+        loadDataFromDisk();     //加载RDB和AOF
+        if (server.cluster_enabled) {       //cluster模式
             if (verifyClusterConfigWithData() == C_ERR) {
                 serverLog(LL_WARNING,
                     "You can't have keys in a DB different than DB 0 when in "
@@ -5516,8 +5516,8 @@ int main(int argc, char **argv) {
                 redisCommunicateSystemd("STATUS=Waiting for MASTER <-> REPLICA sync\n");
             }
         }
-    } else {
-        InitServerLast();
+    } else {        //sentinel模式
+        InitServerLast();       //初始化server
         sentinelIsRunning();
         if (server.supervised_mode == SUPERVISED_SYSTEMD) {
             redisCommunicateSystemd("STATUS=Ready to accept connections\n");
@@ -5530,7 +5530,7 @@ int main(int argc, char **argv) {
         serverLog(LL_WARNING,"WARNING: You specified a maxmemory value that is less than 1MB (current value is %llu bytes). Are you sure this is what you really want?", server.maxmemory);
     }
 
-    redisSetCpuAffinity(server.server_cpulist);
+    redisSetCpuAffinity(server.server_cpulist); //设置cpu亲和性
     setOOMScoreAdj(-1);
 
     aeMain(server.el);
