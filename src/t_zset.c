@@ -309,7 +309,7 @@ int zslValueLteMax(double value, zrangespec *spec) {
 }
 
 /* Returns if there is a part of the zset is in range. */
-int zslIsInRange(zskiplist *zsl, zrangespec *range) {
+int zslIsInRange(zskiplist *zsl, zrangespec *range) {       //判断在不在区间内
     zskiplistNode *x;
 
     /* Test for ranges that will always be empty. */
@@ -335,19 +335,19 @@ zskiplistNode *zslFirstInRange(zskiplist *zsl, zrangespec *range) {
     if (!zslIsInRange(zsl,range)) return NULL;
 
     x = zsl->header;
-    for (i = zsl->level-1; i >= 0; i--) {
+    for (i = zsl->level-1; i >= 0; i--) {       // 跳表查找最小值
         /* Go forward while *OUT* of range. */
         while (x->level[i].forward &&
-            !zslValueGteMin(x->level[i].forward->score,range))
-                x = x->level[i].forward;
+            !zslValueGteMin(x->level[i].forward->score,range))  //大于等于区间最小值
+                x = x->level[i].forward;        // 小于最小值则更新x
     }
 
     /* This is an inner range, so the next node cannot be NULL. */
-    x = x->level[0].forward;
+    x = x->level[0].forward;        // 拿到最小值
     serverAssert(x != NULL);
 
     /* Check if score <= max. */
-    if (!zslValueLteMax(x->score,range)) return NULL;
+    if (!zslValueLteMax(x->score,range)) return NULL;   // 最小值大于区间最大值则返回NULL
     return x;
 }
 
@@ -526,12 +526,12 @@ static int zslParseRange(robj *min, robj *max, zrangespec *spec) {
      * by the "(" character, it's considered "open". For instance
      * ZRANGEBYSCORE zset (1.5 (2.5 will match min < x < max
      * ZRANGEBYSCORE zset 1.5 2.5 will instead match min <= x <= max */
-    if (min->encoding == OBJ_ENCODING_INT) {
+    if (min->encoding == OBJ_ENCODING_INT) {    //判断类型
         spec->min = (long)min->ptr;
     } else {
-        if (((char*)min->ptr)[0] == '(') {
-            spec->min = strtod((char*)min->ptr+1,&eptr);
-            if (eptr[0] != '\0' || isnan(spec->min)) return C_ERR;
+        if (((char*)min->ptr)[0] == '(') {  //看是不是开区间
+            spec->min = strtod((char*)min->ptr+1,&eptr);    //解析成浮点数并保存解析过程中停止的字符
+            if (eptr[0] != '\0' || isnan(spec->min)) return C_ERR;  //isnan检查是不是非数字
             spec->minex = 1;
         } else {
             spec->min = strtod((char*)min->ptr,&eptr);
@@ -730,12 +730,12 @@ double zzlGetScore(unsigned char *sptr) {
     serverAssert(sptr != NULL);
     serverAssert(ziplistGet(sptr,&vstr,&vlen,&vlong));
 
-    if (vstr) {
+    if (vstr) {     //字符串类型
         memcpy(buf,vstr,vlen);
         buf[vlen] = '\0';
-        score = strtod(buf,NULL);
+        score = strtod(buf,NULL);    // 字符串转为数字
     } else {
-        score = vlong;
+        score = vlong;      // 直接取值
     }
 
     return score;
@@ -783,7 +783,7 @@ unsigned int zzlLength(unsigned char *zl) {
 }
 
 /* Move to next entry based on the values in eptr and sptr. Both are set to
- * NULL when there is no next entry. */
+ * NULL when there is no next entry. */ //下一个没值时，两个都被设置为null
 void zzlNext(unsigned char *zl, unsigned char **eptr, unsigned char **sptr) {
     unsigned char *_eptr, *_sptr;
     serverAssert(*eptr != NULL && *sptr != NULL);
@@ -826,12 +826,12 @@ int zzlIsInRange(unsigned char *zl, zrangespec *range) {
     unsigned char *p;
     double score;
 
-    /* Test for ranges that will always be empty. */
+    /* Test for ranges that will always be empty. */    //判断取值区间是不是本来就没有值
     if (range->min > range->max ||
             (range->min == range->max && (range->minex || range->maxex)))
         return 0;
 
-    p = ziplistIndex(zl,-1); /* Last score. */
+    p = ziplistIndex(zl,-1); /* Last score. */  // 拿出最后一个元素
     if (p == NULL) return 0; /* Empty sorted set */
     score = zzlGetScore(p);
     if (!zslValueGteMin(score,range))
@@ -848,22 +848,22 @@ int zzlIsInRange(unsigned char *zl, zrangespec *range) {
 
 /* Find pointer to the first element contained in the specified range.
  * Returns NULL when no element is contained in the range. */
-unsigned char *zzlFirstInRange(unsigned char *zl, zrangespec *range) {
-    unsigned char *eptr = ziplistIndex(zl,0), *sptr;
+unsigned char *zzlFirstInRange(unsigned char *zl, zrangespec *range) {      // 返回区间内的第一个值
+    unsigned char *eptr = ziplistIndex(zl,0), *sptr;    // 拿出第一个元素
     double score;
 
-    /* If everything is out of range, return early. */
+    /* If everything is out of range, return early. */  // 判断元素是否在压缩列表里面
     if (!zzlIsInRange(zl,range)) return NULL;
 
     while (eptr != NULL) {
-        sptr = ziplistNext(zl,eptr);
+        sptr = ziplistNext(zl,eptr);    // 拿到下一个元素
         serverAssert(sptr != NULL);
 
-        score = zzlGetScore(sptr);
-        if (zslValueGteMin(score,range)) {
+        score = zzlGetScore(sptr);      // 拿到得分
+        if (zslValueGteMin(score,range)) {      // 得分是不是在左区间 或者 左区间右边
             /* Check if score <= max. */
-            if (zslValueLteMax(score,range))
-                return eptr;
+            if (zslValueLteMax(score,range))    // 确认得分是不是在右区间 或者 右区间左边
+                return eptr;    // 返回区间内的第一个值
             return NULL;
         }
 
@@ -2555,7 +2555,7 @@ void genericZrangebyscoreCommand(client *c, int reverse) {
         /* Range is given as [min,max] */
         minidx = 2; maxidx = 3;
     }
-
+    //解析min和max,设置到range中
     if (zslParseRange(c->argv[minidx],c->argv[maxidx],&range) != C_OK) {
         addReplyError(c,"min or max is not a float");
         return;
@@ -2563,15 +2563,15 @@ void genericZrangebyscoreCommand(client *c, int reverse) {
 
     /* Parse optional extra arguments. Note that ZCOUNT will exactly have
      * 4 arguments, so we'll never enter the following code path. */
-    if (c->argc > 4) {
+    if (c->argc > 4) {      //看看是否有其他参数
         int remaining = c->argc - 4;
         int pos = 4;
 
         while (remaining) {
-            if (remaining >= 1 && !strcasecmp(c->argv[pos]->ptr,"withscores")) {
+            if (remaining >= 1 && !strcasecmp(c->argv[pos]->ptr,"withscores")) {    //提取withscores
                 pos++; remaining--;
                 withscores = 1;
-            } else if (remaining >= 3 && !strcasecmp(c->argv[pos]->ptr,"limit")) {
+            } else if (remaining >= 3 && !strcasecmp(c->argv[pos]->ptr,"limit")) {  //提取limit参数
                 if ((getLongFromObjectOrReply(c, c->argv[pos+1], &offset, NULL)
                         != C_OK) ||
                     (getLongFromObjectOrReply(c, c->argv[pos+2], &limit, NULL)
@@ -2587,11 +2587,11 @@ void genericZrangebyscoreCommand(client *c, int reverse) {
         }
     }
 
-    /* Ok, lookup the key and get the range */
+    /* Ok, lookup the key and get the range */ //找到这个key，检查这个类型对不对
     if ((zobj = lookupKeyReadOrReply(c,key,shared.emptyarray)) == NULL ||
         checkType(c,zobj,OBJ_ZSET)) return;
 
-    if (zobj->encoding == OBJ_ENCODING_ZIPLIST) {
+    if (zobj->encoding == OBJ_ENCODING_ZIPLIST) {   // 压缩列表
         unsigned char *zl = zobj->ptr;
         unsigned char *eptr, *sptr;
         unsigned char *vstr;
@@ -2603,27 +2603,27 @@ void genericZrangebyscoreCommand(client *c, int reverse) {
         if (reverse) {
             eptr = zzlLastInRange(zl,&range);
         } else {
-            eptr = zzlFirstInRange(zl,&range);
+            eptr = zzlFirstInRange(zl,&range);  // 拿到区间内的第一个值
         }
 
         /* No "first" element in the specified interval. */
-        if (eptr == NULL) {
+        if (eptr == NULL) {     // 拿不到值直接返回
             addReply(c,shared.emptyarray);
             return;
         }
 
         /* Get score pointer for the first element. */
         serverAssertWithInfo(c,zobj,eptr != NULL);
-        sptr = ziplistNext(zl,eptr);
+        sptr = ziplistNext(zl,eptr);        // 拿下一个值
 
-        /* We don't know in advance how many matching elements there are in the
-         * list, so we push this object that will represent the multi-bulk
-         * length in the output buffer, and will "fix" it later */
+        /* We don't know in advance how many matching elements there are in the list, so we push this object that will represent the multi-bulk
+         * length in the output buffer, and will "fix" it later
+         * 我们事先不知道列表中有多少匹配的元素，所以我们在输出缓冲区中推送这个表示多批量长度的对象，稍后将“修复”它 */
         replylen = addReplyDeferredLen(c);
 
         /* If there is an offset, just traverse the number of elements without
          * checking the score because that is done in the next loop. */
-        while (eptr && offset--) {
+        while (eptr && offset--) {      // 跳过offset个元素
             if (reverse) {
                 zzlPrev(zl,&eptr,&sptr);
             } else {
@@ -2661,16 +2661,16 @@ void genericZrangebyscoreCommand(client *c, int reverse) {
                 zzlNext(zl,&eptr,&sptr);
             }
         }
-    } else if (zobj->encoding == OBJ_ENCODING_SKIPLIST) {
+    } else if (zobj->encoding == OBJ_ENCODING_SKIPLIST) {   //跳表
         zset *zs = zobj->ptr;
-        zskiplist *zsl = zs->zsl;
+        zskiplist *zsl = zs->zsl;       // 取出跳表
         zskiplistNode *ln;
 
         /* If reversed, get the last node in range as starting point. */
         if (reverse) {
             ln = zslLastInRange(zsl,&range);
         } else {
-            ln = zslFirstInRange(zsl,&range);
+            ln = zslFirstInRange(zsl,&range);       // 拿到第一个元素
         }
 
         /* No "first" element in the specified interval. */
@@ -2686,7 +2686,7 @@ void genericZrangebyscoreCommand(client *c, int reverse) {
 
         /* If there is an offset, just traverse the number of elements without
          * checking the score because that is done in the next loop. */
-        while (ln && offset--) {
+        while (ln && offset--) {        //跳过offset个值
             if (reverse) {
                 ln = ln->backward;
             } else {

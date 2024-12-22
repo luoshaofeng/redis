@@ -141,7 +141,7 @@ typedef long long ustime_t; /* microsecond time type. */
 
 /* Protocol and I/O related defines */
 #define PROTO_MAX_QUERYBUF_LEN  (1024*1024*1024) /* 1GB max query buffer. */
-#define PROTO_IOBUF_LEN         (1024*16)  /* Generic I/O buffer size */
+#define PROTO_IOBUF_LEN         (1024*16)  /* IO缓冲区 Generic I/O buffer size */
 #define PROTO_REPLY_CHUNK_BYTES (16*1024) /* 16k output buffer */
 #define PROTO_INLINE_MAX_SIZE   (1024*64) /* Max size of inline reads */
 #define PROTO_MBULK_BIG_ARG     (1024*32)
@@ -223,7 +223,7 @@ extern int configOOMScoreAdjValuesDefaults[CONFIG_OOM_COUNT];
 #define CLIENT_MASTER (1<<1)  /* This client is a master */
 #define CLIENT_MONITOR (1<<2) /* This client is a slave monitor, see MONITOR */
 #define CLIENT_MULTI (1<<3)   /* This client is in a MULTI context */
-#define CLIENT_BLOCKED (1<<4) /* The client is waiting in a blocking operation */
+#define CLIENT_BLOCKED (1<<4) /* 客户端阻塞 The client is waiting in a blocking operation */
 #define CLIENT_DIRTY_CAS (1<<5) /* Watched keys modified. EXEC will fail. */
 #define CLIENT_CLOSE_AFTER_REPLY (1<<6) /* Close after writing entire reply. */
 #define CLIENT_UNBLOCKED (1<<7) /* This client was unblocked and is stored in
@@ -254,7 +254,7 @@ extern int configOOMScoreAdjValuesDefaults[CONFIG_OOM_COUNT];
 #define CLIENT_PENDING_READ (1<<29) /* The client has pending reads and was put
                                        in the list of clients we can read
                                        from. */
-#define CLIENT_PENDING_COMMAND (1<<30) /* Used in threaded I/O to signal after
+#define CLIENT_PENDING_COMMAND (1<<30) /* 客户端有待执行的命令 Used in threaded I/O to signal after
                                           we return single threaded that the
                                           client has already pending commands
                                           to be executed. */
@@ -808,12 +808,12 @@ typedef struct client {
     redisDb *db;            /* Pointer to currently SELECTed DB. */
     robj *name;             /* As set by CLIENT SETNAME. */
     sds querybuf;           /* Buffer we use to accumulate client queries. */
-    size_t qb_pos;          /* The position we have read in querybuf. */
+    size_t qb_pos;          /* 在querybuf读取的位置 The position we have read in querybuf. */
     sds pending_querybuf;   /* If this client is flagged as master, this buffer
                                represents the yet not applied portion of the
                                replication stream that we are receiving from
                                the master. */
-    size_t querybuf_peak;   /* Recent (100ms or more) peak of querybuf size. */
+    size_t querybuf_peak;   /* 最近100ms或更长时间querybuf的峰值 Recent (100ms or more) peak of querybuf size. */
     int argc;               /* Num of arguments of current command. */
     robj **argv;            /* Arguments of current command. */
     size_t argv_len_sum;    /* Sum of lengths of objects in argv list. */
@@ -829,7 +829,7 @@ typedef struct client {
     size_t sentlen;         /* Amount of bytes already sent in the current
                                buffer or object being sent. */
     time_t ctime;           /* Client creation time. */
-    time_t lastinteraction; /* Time of the last interaction, used for timeout */
+    time_t lastinteraction; /* 最后的交互时间 Time of the last interaction, used for timeout */
     time_t obuf_soft_limit_reached_time;
     uint64_t flags;         /* Client flags: CLIENT_* macros. */
     int authenticated;      /* Needed when the default user requires auth. */
@@ -931,7 +931,7 @@ typedef struct zskiplistNode {
 typedef struct zskiplist {
     struct zskiplistNode *header, *tail;
     unsigned long length;
-    int level;
+    int level;      // 跳表最大层数
 } zskiplist;
 
 typedef struct zset {
@@ -1117,7 +1117,7 @@ struct redisServer {
     int bindaddr_count;         /* Number of addresses in server.bindaddr[] */
     char *unixsocket;           /* UNIX socket path */
     mode_t unixsocketperm;      /* UNIX socket permission */
-    int ipfd[CONFIG_BINDADDR_MAX]; /* TCP socket file descriptors */
+    int ipfd[CONFIG_BINDADDR_MAX]; /* 保存文件描述符 TCP socket file descriptors */
     int ipfd_count;             /* Used slots in ipfd[] */
     int tlsfd[CONFIG_BINDADDR_MAX]; /* TLS socket file descriptors */
     int tlsfd_count;            /* Used slots in tlsfd[] */
@@ -1131,7 +1131,7 @@ struct redisServer {
     list *slaves, *monitors;    /* List of slaves and MONITORs */
     client *current_client;     /* Current client executing the command. */
     rax *clients_timeout_table; /* 阻塞客户端的树根 Radix tree for blocked clients timeouts. */
-    long fixed_time_expire;     /* If > 0, expire keys against server.mstime. */
+    long fixed_time_expire;     /* 大于0，根据server.mstime判断过期键 If > 0, expire keys against server.mstime. */
     rax *clients_index;         /* Active clients dictionary by client ID. */
     int clients_paused;         /* True if clients are currently paused */
     mstime_t clients_pause_end_time; /* Time when we undo clients_paused */
@@ -1147,7 +1147,7 @@ struct redisServer {
     long long events_processed_while_blocked; /* processEventsWhileBlocked() */
 
     /* RDB / AOF loading information */
-    volatile sig_atomic_t loading; /* We are loading data from disk if true */
+    volatile sig_atomic_t loading; /* RDB或者AOF加载数据 We are loading data from disk if true */
     off_t loading_total_bytes;
     off_t loading_loaded_bytes;
     time_t loading_start_time;
@@ -1161,13 +1161,13 @@ struct redisServer {
     /* Fields used only for stats */
     time_t stat_starttime;          /* Server start time */
     long long stat_numcommands;     /* Number of processed commands */
-    long long stat_numconnections;  /* Number of connections received */
+    long long stat_numconnections;  /* 添加连接接收数 Number of connections received */
     long long stat_expiredkeys;     /* Number of expired keys */
     double stat_expired_stale_perc; /* Percentage of keys probably expired */
     long long stat_expired_time_cap_reached_count; /* Early expire cylce stops.*/
     long long stat_expire_cycle_time_used; /* Cumulative microseconds used. */
     long long stat_evictedkeys;     /* Number of evicted keys (maxmemory) */
-    long long stat_keyspace_hits;   /* Number of successful lookups of keys */
+    long long stat_keyspace_hits;   /* 统计成功找到key的数量 Number of successful lookups of keys */
     long long stat_keyspace_misses; /* Number of failed lookups of keys */
     long long stat_active_defrag_hits;      /* number of allocations moved */
     long long stat_active_defrag_misses;    /* number of allocations scanned but not moved */
@@ -1186,7 +1186,7 @@ struct redisServer {
     long long slowlog_log_slower_than; /* SLOWLOG time limit (to get logged) */
     unsigned long slowlog_max_len;     /* SLOWLOG max number of items logged */
     struct malloc_stats cron_malloc_stats; /* sampled in serverCron(). */
-    _Atomic long long stat_net_input_bytes; /* Bytes read from network. */
+    _Atomic long long stat_net_input_bytes; /* 从网络读取的字节数 Bytes read from network. */
     _Atomic long long stat_net_output_bytes; /* Bytes written to network. */
     size_t stat_rdb_cow_bytes;      /* Copy on write bytes during RDB saving. */
     size_t stat_aof_cow_bytes;      /* Copy on write bytes during AOF rewrite. */
@@ -1219,7 +1219,7 @@ struct redisServer {
     int active_defrag_cycle_min;       /* minimal effort for defrag in CPU percentage */
     int active_defrag_cycle_max;       /* maximal effort for defrag in CPU percentage */
     unsigned long active_defrag_max_scan_fields; /* maximum number of fields of set/hash/zset/list to process from within the main dict scan */
-    _Atomic size_t client_max_querybuf_len; /* Limit for client query buffer length */
+    _Atomic size_t client_max_querybuf_len; /* 客户端最大缓存长度 Limit for client query buffer length */
     int dbnum;                      /* Total number of configured DBs */
     int supervised;                 /* 1 if supervised, 0 otherwise. */
     int supervised_mode;            /* See SUPERVISED_* */
@@ -1341,7 +1341,7 @@ struct redisServer {
     char *masterhost;               /* Hostname of master */
     int masterport;                 /* Port of master */
     int repl_timeout;               /* Timeout after N seconds of master idle */
-    client *master;     /* Client that is master for this slave */
+    client *master;     /* 命令是master给slave的？ Client that is master for this slave */
     client *cached_master; /* Cached master to be reused for PSYNC. */
     int repl_syncio_timeout; /* Timeout for synchronous I/O calls */
     int repl_state;          /* Replication status if the instance is a slave */
@@ -1446,7 +1446,7 @@ struct redisServer {
     /* Scripting */
     lua_State *lua; /* The Lua interpreter. We use just one for all clients */
     client *lua_client;   /* The "fake client" to query Redis from Lua */
-    client *lua_caller;   /* The client running EVAL right now, or NULL */
+    client *lua_caller;   /* 正在运行lua脚本 The client running EVAL right now, or NULL */
     char* lua_cur_script; /* SHA1 of the script currently running, or NULL */
     dict *lua_scripts;         /* A dictionary of SHA1 -> Lua scripts */
     unsigned long long lua_scripts_mem;  /* Cached scripts' memory + oh */
@@ -1983,7 +1983,7 @@ void addACLLogEntry(client *c, int reason, int keypos, sds username);
 /* Struct to hold an inclusive/exclusive range spec by score comparison. */
 typedef struct {
     double min, max;
-    int minex, maxex; /* are min or max exclusive? */
+    int minex, maxex; /* 表示开区间？ are min or max exclusive? */
 } zrangespec;
 
 /* Struct to hold an inclusive/exclusive range spec by lexicographic comparison. */

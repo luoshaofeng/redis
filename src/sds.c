@@ -333,7 +333,7 @@ void *sdsAllocPtr(sds s) {
  * ... check for nread <= 0 and handle it ...
  * sdsIncrLen(s, nread);
  */
-void sdsIncrLen(sds s, ssize_t incr) {
+void sdsIncrLen(sds s, ssize_t incr) {  //增加sds长度
     unsigned char flags = s[-1];
     size_t len;
     switch(flags&SDS_TYPE_MASK) {

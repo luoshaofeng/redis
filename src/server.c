@@ -2726,7 +2726,7 @@ int listenToPort(int port, int *fds, int *count) {
             fds[*count] = anetTcp6Server(server.neterr,port,NULL,
                 server.tcp_backlog);    //建立TCP连接（监听），保存文件描述符
             if (fds[*count] != ANET_ERR) {
-                anetNonBlock(NULL,fds[*count]);
+                anetNonBlock(NULL,fds[*count]); //设置为非阻塞
                 (*count)++;
             } else if (errno == EAFNOSUPPORT) {
                 unsupported++;
@@ -3116,9 +3116,9 @@ int populateCommandTableParseFlags(struct redisCommand *c, char *strflags) {
 
 /* Populates the Redis Command Table starting from the hard coded list
  * we have on top of server.c file. */
-void populateCommandTable(void) {
+void populateCommandTable(void) {   //从server.c文件顶部的硬编码列表开始填充Redis命令表。
     int j;
-    int numcommands = sizeof(redisCommandTable)/sizeof(struct redisCommand);
+    int numcommands = sizeof(redisCommandTable)/sizeof(struct redisCommand);    //计算命令数量
 
     for (j = 0; j < numcommands; j++) {
         struct redisCommand *c = redisCommandTable+j;
@@ -3129,11 +3129,11 @@ void populateCommandTable(void) {
         if (populateCommandTableParseFlags(c,c->sflags) == C_ERR)
             serverPanic("Unsupported command flag");
 
-        c->id = ACLGetCommandID(c->name); /* Assign the ID used for ACL. */
-        retval1 = dictAdd(server.commands, sdsnew(c->name), c);
+        c->id = ACLGetCommandID(c->name); /*分配一个ID Assign the ID used for ACL. */
+        retval1 = dictAdd(server.commands, sdsnew(c->name), c); //添加到命令中
         /* Populate an additional dictionary that will be unaffected
          * by rename-command statements in redis.conf. */
-        retval2 = dictAdd(server.orig_commands, sdsnew(c->name), c);
+        retval2 = dictAdd(server.orig_commands, sdsnew(c->name), c); //添加到原始命令
         serverAssert(retval1 == DICT_OK && retval2 == DICT_OK);
     }
 }
@@ -3359,7 +3359,7 @@ void call(client *c, int flags) {
     dirty = server.dirty;
 
     /* Update cache time, in case we have nested calls we want to
-     * update only on the first call*/
+     * update only on the first call*/  //更新缓存时间，如果我们有嵌套调用，我们只想在第一次调用时更新
     if (server.fixed_time_expire++ == 0) {
         updateCachedTime(0);
     }
@@ -3566,7 +3566,7 @@ int processCommand(client *c) {
 
     /* Now lookup the command and check ASAP about trivial error conditions
      * such as wrong arity, bad command name and so forth. */
-    c->cmd = c->lastcmd = lookupCommand(c->argv[0]->ptr);
+    c->cmd = c->lastcmd = lookupCommand(c->argv[0]->ptr);       //拿到操作命令
     if (!c->cmd) {
         sds args = sdsempty();
         int i;
@@ -3592,7 +3592,7 @@ int processCommand(client *c) {
     int is_denyloading_command = !(c->cmd->flags & CMD_LOADING) ||
                                  (c->cmd->proc == execCommand && (c->mstate.cmd_inv_flags & CMD_LOADING));
 
-    if (authRequired(c)) {
+    if (authRequired(c)) {  // 校验是否需要验证
         /* AUTH and HELLO and no auth commands are valid even in
          * non-authenticated state. */
         if (!(c->cmd->flags & CMD_NO_AUTH)) {
@@ -3789,7 +3789,7 @@ int processCommand(client *c) {
         queueMultiCommand(c);
         addReply(c,shared.queued);
     } else {
-        call(c,CMD_CALL_FULL);
+        call(c,CMD_CALL_FULL);      // 执行命令
         c->woff = server.master_repl_offset;
         if (listLength(server.ready_keys))
             handleClientsBlockedOnKeys();
@@ -5494,7 +5494,7 @@ int main(int argc, char **argv) {
     #endif /* __linux__ */
         moduleLoadFromQueue();
         ACLLoadUsersAtStartup();
-        InitServerLast();   //初始化server
+        InitServerLast();   //初始化server，创建后台线程,创建IO线程
         loadDataFromDisk();     //加载RDB和AOF
         if (server.cluster_enabled) {       //cluster模式
             if (verifyClusterConfigWithData() == C_ERR) {

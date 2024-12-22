@@ -92,7 +92,7 @@ connection *connCreateSocket() {
  * is not in an error state (which is not possible for a socket connection,
  * but could but possible with other protocols).
  */
-connection *connCreateAcceptedSocket(int fd) {
+connection *connCreateAcceptedSocket(int fd) {  // 创建一个链接
     connection *conn = connCreateSocket();
     conn->fd = fd;
     conn->state = CONN_STATE_ACCEPTING;
@@ -195,15 +195,15 @@ static int connSocketRead(connection *conn, void *buf, size_t buf_len) {
 
     return ret;
 }
-
+// 设置accept处理函数
 static int connSocketAccept(connection *conn, ConnectionCallbackFunc accept_handler) {
     int ret = C_OK;
 
     if (conn->state != CONN_STATE_ACCEPTING) return C_ERR;
-    conn->state = CONN_STATE_CONNECTED;
+    conn->state = CONN_STATE_CONNECTED; //设置状态为已连接
 
     connIncrRefs(conn);
-    if (!callHandler(conn, accept_handler)) ret = C_ERR;
+    if (!callHandler(conn, accept_handler)) ret = C_ERR;    //调用处理函数
     connDecrRefs(conn);
 
     return ret;
@@ -394,7 +394,7 @@ int connNonBlock(connection *conn) {
     if (conn->fd == -1) return C_ERR;
     return anetNonBlock(NULL, conn->fd);
 }
-
+// 不延迟发送包
 int connEnableTcpNoDelay(connection *conn) {
     if (conn->fd == -1) return C_ERR;
     return anetEnableTcpNoDelay(NULL, conn->fd);

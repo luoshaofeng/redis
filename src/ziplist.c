@@ -280,12 +280,12 @@ int ziplistSafeToAdd(unsigned char* zl, size_t add) {
  * Note that this is not how the data is actually encoded, is just what we
  * get filled by a function in order to operate more easily. */
 typedef struct zlentry {
-    unsigned int prevrawlensize; /* Bytes used to encode the previous entry len*/
-    unsigned int prevrawlen;     /* Previous entry len. */
-    unsigned int lensize;        /* Bytes used to encode this entry type/len.
+    unsigned int prevrawlensize; /* 上一个元素编码长度 Bytes used to encode the previous entry len*/
+    unsigned int prevrawlen;     /* 上一个元素的长度 Previous entry len. */
+    unsigned int lensize;        /* 编码使用字节大小 Bytes used to encode this entry type/len.
                                     For example strings have a 1, 2 or 5 bytes
                                     header. Integers always use a single byte.*/
-    unsigned int len;            /* Bytes used to represent the actual entry.
+    unsigned int len;            /* 这个元素的长度 Bytes used to represent the actual entry.
                                     For strings this is just the string length
                                     while for integers it is 1, 2, 3, 4, 8 or
                                     0 (for 4 bit immediate) depending on the
@@ -295,7 +295,7 @@ typedef struct zlentry {
                                     the entry encoding. However for 4 bits
                                     immediate integers this can assume a range
                                     of values and must be range-checked. */
-    unsigned char *p;            /* Pointer to the very start of the entry, that
+    unsigned char *p;            /* 这个元素的头指针 Pointer to the very start of the entry, that
                                     is, this points to prev-entry-len field. */
 } zlentry;
 
@@ -307,7 +307,7 @@ typedef struct zlentry {
 }
 
 /* Extract the encoding from the byte pointed by 'ptr' and set it into
- * 'encoding' field of the zlentry structure. */
+ * 'encoding' field of the zlentry structure. */    //判断编码
 #define ZIP_ENTRY_ENCODING(ptr, encoding) do {  \
     (encoding) = (ptr[0]); \
     if ((encoding) < ZIP_STR_MASK) (encoding) &= ZIP_STR_MASK; \
@@ -430,7 +430,7 @@ unsigned int zipStorePrevEntryLength(unsigned char *p, unsigned int len) {
 }
 
 /* Return the number of bytes used to encode the length of the previous
- * entry. The length is returned by setting the var 'prevlensize'. */
+ * entry. The length is returned by setting the var 'prevlensize'. */   //查看看度是多少编码的
 #define ZIP_DECODE_PREVLENSIZE(ptr, prevlensize) do {                          \
     if ((ptr)[0] < ZIP_BIG_PREVLEN) {                                          \
         (prevlensize) = 1;                                                     \
@@ -579,7 +579,7 @@ int64_t zipLoadInteger(unsigned char *p, unsigned char encoding) {
 /* Return a struct with all information about an entry. */
 void zipEntry(unsigned char *p, zlentry *e) {
 
-    ZIP_DECODE_PREVLEN(p, e->prevrawlensize, e->prevrawlen);
+    ZIP_DECODE_PREVLEN(p, e->prevrawlensize, e->prevrawlen);   //从p中提取prevrawlensize和prevrawlen的值
     ZIP_DECODE_LENGTH(p + e->prevrawlensize, e->encoding, e->lensize, e->len);
     e->headersize = e->prevrawlensize + e->lensize;
     e->p = p;
@@ -991,8 +991,8 @@ unsigned char *ziplistIndex(unsigned char *zl, int index) {
             }
         }
     } else {
-        p = ZIPLIST_ENTRY_HEAD(zl);
-        while (p[0] != ZIP_END && index--) {
+        p = ZIPLIST_ENTRY_HEAD(zl); // 取压缩列表表头
+        while (p[0] != ZIP_END && index--) {        //遍历压缩列表
             p += zipRawEntryLength(p);
         }
     }
@@ -1051,13 +1051,13 @@ unsigned int ziplistGet(unsigned char *p, unsigned char **sstr, unsigned int *sl
     if (p == NULL || p[0] == ZIP_END) return 0;
     if (sstr) *sstr = NULL;
 
-    zipEntry(p, &entry);
-    if (ZIP_IS_STR(entry.encoding)) {
+    zipEntry(p, &entry);    //转成entry结构
+    if (ZIP_IS_STR(entry.encoding)) {       // 判断编码是不是string类型
         if (sstr) {
-            *slen = entry.len;
-            *sstr = p+entry.headersize;
+            *slen = entry.len;      // 提取串长度
+            *sstr = p+entry.headersize; // 保存字符串
         }
-    } else {
+    } else {        // int类型
         if (sval) {
             *sval = zipLoadInteger(p+entry.headersize,entry.encoding);
         }

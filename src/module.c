@@ -7374,7 +7374,7 @@ int RM_IsSubEventSupported(RedisModuleEvent event, int64_t subevent) {
  *
  * 'eid' and 'subid' are just the main event ID and the sub event associated
  * with the event, depending on what exactly happened. */
-void moduleFireServerEvent(uint64_t eid, int subid, void *data) {
+void moduleFireServerEvent(uint64_t eid, int subid, void *data) {   //每当我们想要触发一个可以被某个模块拦截的事件时，Redis内部都会调用这个函数
     /* Fast path to return ASAP if there is nothing to do, avoiding to
      * setup the iterator and so forth: we want this call to be extremely
      * cheap if there are no registered modules. */

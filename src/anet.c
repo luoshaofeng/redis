@@ -475,7 +475,7 @@ static int anetV6Only(char *err, int s) {
     }
     return ANET_OK;
 }
-
+//监听
 static int _anetTcpServer(char *err, int port, char *bindaddr, int af, int backlog)
 {
     int s = -1, rv;
@@ -563,13 +563,13 @@ int anetTcpAccept(char *err, int s, char *ip, size_t ip_len, int *port) {
     int fd;
     struct sockaddr_storage sa;
     socklen_t salen = sizeof(sa);
-    if ((fd = anetGenericAccept(err,s,(struct sockaddr*)&sa,&salen)) == -1)
+    if ((fd = anetGenericAccept(err,s,(struct sockaddr*)&sa,&salen)) == -1) //调用accept拿到文件描述符
         return ANET_ERR;
 
     if (sa.ss_family == AF_INET) {
         struct sockaddr_in *s = (struct sockaddr_in *)&sa;
-        if (ip) inet_ntop(AF_INET,(void*)&(s->sin_addr),ip,ip_len);
-        if (port) *port = ntohs(s->sin_port);
+        if (ip) inet_ntop(AF_INET,(void*)&(s->sin_addr),ip,ip_len); //将网络地址转换为标准的文本格式字符串
+        if (port) *port = ntohs(s->sin_port);   //将一个无符号短整形数从网络字节顺序转换为主机字节顺序
     } else {
         struct sockaddr_in6 *s = (struct sockaddr_in6 *)&sa;
         if (ip) inet_ntop(AF_INET6,(void*)&(s->sin6_addr),ip,ip_len);

@@ -87,13 +87,13 @@ int listMatchObjects(void *a, void *b) {
 
 /* This function links the client to the global linked list of clients.
  * unlinkClient() does the opposite, among other things. */
-void linkClient(client *c) {
+void linkClient(client *c) {    // 链接到全局客户端连接上
     listAddNodeTail(server.clients,c);
     /* Note that we remember the linked list node where the client is stored,
      * this way removing the client in unlinkClient() will not require
      * a linear scan, but just a constant time operation. */
     c->client_list_node = listLast(server.clients);
-    uint64_t id = htonu64(c->id);
+    uint64_t id = htonu64(c->id);   //插入到树中
     raxInsert(server.clients_index,(unsigned char*)&id,sizeof(id),c,NULL);
 }
 
@@ -105,7 +105,7 @@ int authRequired(client *c) {
                         !c->authenticated;
     return auth_required;
 }
-
+// 创建一个客户端
 client *createClient(connection *conn) {
     client *c = zmalloc(sizeof(client));
 
@@ -114,15 +114,15 @@ client *createClient(connection *conn) {
      * in the context of a client. When commands are executed in other
      * contexts (for instance a Lua script) we need a non connected client. */
     if (conn) {
-        connNonBlock(conn);
-        connEnableTcpNoDelay(conn);
+        connNonBlock(conn);     //非阻塞
+        connEnableTcpNoDelay(conn); //不延迟发送包
         if (server.tcpkeepalive)
             connKeepAlive(conn,server.tcpkeepalive);
-        connSetReadHandler(conn, readQueryFromClient);
-        connSetPrivateData(conn, c);
+        connSetReadHandler(conn, readQueryFromClient);  // 设置读处理函数
+        connSetPrivateData(conn, c);    // 设置私有数据
     }
 
-    selectDb(c,0);
+    selectDb(c,0);  // 选择0数据库
     uint64_t client_id = ++server.next_client_id;
     c->id = client_id;
     c->resp = 2;
@@ -187,8 +187,8 @@ client *createClient(connection *conn) {
     c->auth_module = NULL;
     listSetFreeMethod(c->pubsub_patterns,decrRefCountVoid);
     listSetMatchMethod(c->pubsub_patterns,listMatchObjects);
-    if (conn) linkClient(c);
-    initClientMultiState(c);
+    if (conn) linkClient(c);    // 将客户端添加到全局变量中
+    initClientMultiState(c);        // 初始化mstate
     return c;
 }
 
@@ -213,7 +213,7 @@ void clientInstallWriteHandler(client *c) {
          * loop, we can try to directly write to the client sockets avoiding
          * a system call. We'll only really install the write handler if
          * we'll not be able to write the whole reply at once. */
-        c->flags |= CLIENT_PENDING_WRITE;
+        c->flags |= CLIENT_PENDING_WRITE;   //设置为数据待写入
         listAddNodeHead(server.clients_pending_write,c);
     }
 }
@@ -266,7 +266,7 @@ int prepareClientToWrite(client *c) {
      * If CLIENT_PENDING_READ is set, we're in an IO thread and should
      * not install a write handler. Instead, it will be done by
      * handleClientsWithPendingReadsUsingThreads() upon return.
-     */
+     */ //客户端缓冲区没有待处理数据写入，客户端也不是准备读
     if (!clientHasPendingReplies(c) && !(c->flags & CLIENT_PENDING_READ))
             clientInstallWriteHandler(c);
 
@@ -924,9 +924,9 @@ int clientHasPendingReplies(client *c) {
 }
 
 void clientAcceptHandler(connection *conn) {
-    client *c = connGetPrivateData(conn);
+    client *c = connGetPrivateData(conn);   //拿出私有数据
 
-    if (connGetState(conn) != CONN_STATE_CONNECTED) {
+    if (connGetState(conn) != CONN_STATE_CONNECTED) {   //检查连接状态
         serverLog(LL_WARNING,
                 "Error accepting a client connection: %s",
                 connGetLastError(conn));
@@ -989,7 +989,7 @@ static void acceptCommonHandler(connection *conn, int flags, char *ip) {
     char conninfo[100];
     UNUSED(ip);
 
-    if (connGetState(conn) != CONN_STATE_ACCEPTING) {
+    if (connGetState(conn) != CONN_STATE_ACCEPTING) {   //检查链接状态是不是接受中
         serverLog(LL_VERBOSE,
             "Accepted client connection in error state: %s (conn: %s)",
             connGetLastError(conn),
@@ -1025,7 +1025,7 @@ static void acceptCommonHandler(connection *conn, int flags, char *ip) {
     }
 
     /* Create connection and client */
-    if ((c = createClient(conn)) == NULL) {
+    if ((c = createClient(conn)) == NULL) { //创建一个客户端
         serverLog(LL_WARNING,
             "Error registering fd event for the new client: %s (conn: %s)",
             connGetLastError(conn),
@@ -1045,7 +1045,7 @@ static void acceptCommonHandler(connection *conn, int flags, char *ip) {
      *
      * Because of that, we must do nothing else afterwards.
      */
-    if (connAccept(conn, clientAcceptHandler) == C_ERR) {
+    if (connAccept(conn, clientAcceptHandler) == C_ERR) {   //设置连接状态，处理请求
         char conninfo[100];
         if (connGetState(conn) == CONN_STATE_ERROR)
             serverLog(LL_WARNING,
@@ -1063,7 +1063,7 @@ void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
     UNUSED(mask);
     UNUSED(privdata);
 
-    while(max--) {
+    while(max--) {  //anetTcpAccept调用accept函数拿到文件描述符，转换ip和端口为标准模式
         cfd = anetTcpAccept(server.neterr, fd, cip, sizeof(cip), &cport);
         if (cfd == ANET_ERR) {
             if (errno != EWOULDBLOCK)
@@ -1949,25 +1949,25 @@ int processPendingCommandsAndResetClient(client *c) {
  * more query buffer to process, because we read more data from the socket
  * or because a client was blocked and later reactivated, so there could be
  * pending query buffer, already representing a full command, to process. */
-void processInputBuffer(client *c) {
+void processInputBuffer(client *c) {    // 处理客户端缓存数据
     /* Keep processing while there is something in the input buffer */
-    while(c->qb_pos < sdslen(c->querybuf)) {
+    while(c->qb_pos < sdslen(c->querybuf)) {        //不断处理缓冲区中的数据
         /* Return if clients are paused. */
         if (!(c->flags & CLIENT_SLAVE) && 
             !(c->flags & CLIENT_PENDING_READ) && 
             clientsArePaused()) break;
 
         /* Immediately abort if the client is in the middle of something. */
-        if (c->flags & CLIENT_BLOCKED) break;
+        if (c->flags & CLIENT_BLOCKED) break;   //客户端阻塞退出
 
         /* Don't process more buffers from clients that have already pending
          * commands to execute in c->argv. */
-        if (c->flags & CLIENT_PENDING_COMMAND) break;
+        if (c->flags & CLIENT_PENDING_COMMAND) break;   //客户端有待执行的命令
 
         /* Don't process input from the master while there is a busy script
          * condition on the slave. We want just to accumulate the replication
          * stream (instead of replying -BUSY like we do with other clients) and
-         * later resume the processing. */
+         * later resume the processing. */ //从服务器繁忙，不处理主服务器的命令
         if (server.lua_timedout && c->flags & CLIENT_MASTER) break;
 
         /* CLIENT_CLOSE_AFTER_REPLY closes the connection once the reply is
@@ -2064,10 +2064,10 @@ void readQueryFromClient(connection *conn) {
         if (remaining > 0 && remaining < readlen) readlen = remaining;
     }
 
-    qblen = sdslen(c->querybuf);
-    if (c->querybuf_peak < qblen) c->querybuf_peak = qblen;
+    qblen = sdslen(c->querybuf);    //获取缓冲区的长度
+    if (c->querybuf_peak < qblen) c->querybuf_peak = qblen; //更新querybuf的峰值
     c->querybuf = sdsMakeRoomFor(c->querybuf, readlen);
-    nread = connRead(c->conn, c->querybuf+qblen, readlen);
+    nread = connRead(c->conn, c->querybuf+qblen, readlen);  // 从文件描述符获取数据
     if (nread == -1) {
         if (connGetState(conn) == CONN_STATE_CONNECTED) {
             return;
@@ -2090,9 +2090,9 @@ void readQueryFromClient(connection *conn) {
 
     sdsIncrLen(c->querybuf,nread);
     c->lastinteraction = server.unixtime;
-    if (c->flags & CLIENT_MASTER) c->read_reploff += nread;
+    if (c->flags & CLIENT_MASTER) c->read_reploff += nread; //主从同步相关
     server.stat_net_input_bytes += nread;
-    if (sdslen(c->querybuf) > server.client_max_querybuf_len) {
+    if (sdslen(c->querybuf) > server.client_max_querybuf_len) { //检查缓存长度是否大于限制
         sds ci = catClientInfoString(sdsempty(),c), bytes = sdsempty();
 
         bytes = sdscatrepr(bytes,c->querybuf,64);

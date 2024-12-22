@@ -401,7 +401,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
         struct timeval tv, *tvp;
 
         if (flags & AE_TIME_EVENTS && !(flags & AE_DONT_WAIT))
-            shortest = aeSearchNearestTimer(eventLoop);
+            shortest = aeSearchNearestTimer(eventLoop); //找到serverCron
         if (shortest) {
             long now_sec, now_ms;
 
@@ -446,12 +446,12 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
          * some event fires. */
         numevents = aeApiPoll(eventLoop, tvp);      // 调用select读取文件描述符信息
 
-        /* After sleep callback. */
+        /* 回调事件 After sleep callback. */
         if (eventLoop->aftersleep != NULL && flags & AE_CALL_AFTER_SLEEP)
             eventLoop->aftersleep(eventLoop);
 
         for (j = 0; j < numevents; j++) {
-            aeFileEvent *fe = &eventLoop->events[eventLoop->fired[j].fd];
+            aeFileEvent *fe = &eventLoop->events[eventLoop->fired[j].fd];   //拿到事件
             int mask = eventLoop->fired[j].mask;
             int fd = eventLoop->fired[j].fd;
             int fired = 0; /* Number of events fired for current fd. */
@@ -467,7 +467,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
              * This is useful when, for instance, we want to do things
              * in the beforeSleep() hook, like fsyncing a file to disk,
              * before replying to a client. */
-            int invert = fe->mask & AE_BARRIER;
+            int invert = fe->mask & AE_BARRIER; //调用反转
 
             /* Note the "fe->mask & mask & ..." code: maybe an already
              * processed event removed an element that fired and we still
@@ -475,14 +475,14 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
              *
              * Fire the readable event if the call sequence is not
              * inverted. */
-            if (!invert && fe->mask & mask & AE_READABLE) {
+            if (!invert && fe->mask & mask & AE_READABLE) { //有读事件
                 fe->rfileProc(eventLoop,fd,fe->clientData,mask);
                 fired++;
                 fe = &eventLoop->events[fd]; /* Refresh in case of resize. */
             }
 
             /* Fire the writable event. */
-            if (fe->mask & mask & AE_WRITABLE) {
+            if (fe->mask & mask & AE_WRITABLE) {    //有写事件
                 if (!fired || fe->wfileProc != fe->rfileProc) {
                     fe->wfileProc(eventLoop,fd,fe->clientData,mask);
                     fired++;

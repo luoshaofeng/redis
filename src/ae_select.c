@@ -84,7 +84,7 @@ static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
     retval = select(eventLoop->maxfd+1,
                 &state->_rfds,&state->_wfds,NULL,tvp);
     if (retval > 0) {
-        for (j = 0; j <= eventLoop->maxfd; j++) {
+        for (j = 0; j <= eventLoop->maxfd; j++) {       //遍历文件描述符（不一定每个都存在）
             int mask = 0;
             aeFileEvent *fe = &eventLoop->events[j];
 
@@ -93,8 +93,8 @@ static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
                 mask |= AE_READABLE;
             if (fe->mask & AE_WRITABLE && FD_ISSET(j,&state->_wfds))
                 mask |= AE_WRITABLE;
-            eventLoop->fired[numevents].fd = j;
-            eventLoop->fired[numevents].mask = mask;
+            eventLoop->fired[numevents].fd = j;     //保存文件描述
+            eventLoop->fired[numevents].mask = mask;   //保存文件描述符状态
             numevents++;
         }
     }

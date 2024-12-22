@@ -113,11 +113,11 @@ dict *dictCreate(dictType *type,
 {
     dict *d = zmalloc(sizeof(*d));
 
-    _dictInit(d,type,privDataPtr);
+    _dictInit(d,type,privDataPtr);  //初始化哈希表
     return d;
 }
 
-/* Initialize the hash table */
+/* 初始化哈希表 Initialize the hash table */
 int _dictInit(dict *d, dictType *type,
         void *privDataPtr)
 {
@@ -376,23 +376,23 @@ static dictEntry *dictGenericDelete(dict *d, const void *key, int nofree) {
     dictEntry *he, *prevHe;
     int table;
 
-    if (d->ht[0].used == 0 && d->ht[1].used == 0) return NULL;
+    if (d->ht[0].used == 0 && d->ht[1].used == 0) return NULL;  // 字典没值，则返回
 
-    if (dictIsRehashing(d)) _dictRehashStep(d);
-    h = dictHashKey(d, key);
+    if (dictIsRehashing(d)) _dictRehashStep(d); // 判断是否在重hash
+    h = dictHashKey(d, key);        //拿到hash值
 
     for (table = 0; table <= 1; table++) {
         idx = h & d->ht[table].sizemask;
-        he = d->ht[table].table[idx];
+        he = d->ht[table].table[idx];       // 定位到key所在的hash位置
         prevHe = NULL;
         while(he) {
-            if (key==he->key || dictCompareKeys(d, key, he->key)) {
+            if (key==he->key || dictCompareKeys(d, key, he->key)) { //比较key是否相等
                 /* Unlink the element from the list */
                 if (prevHe)
                     prevHe->next = he->next;
                 else
                     d->ht[table].table[idx] = he->next;
-                if (!nofree) {
+                if (!nofree) {      //延迟删还是直接删
                     dictFreeKey(d, he);
                     dictFreeVal(d, he);
                     zfree(he);
@@ -401,14 +401,14 @@ static dictEntry *dictGenericDelete(dict *d, const void *key, int nofree) {
                 return he;
             }
             prevHe = he;
-            he = he->next;
+            he = he->next;  // 遍历链表
         }
         if (!dictIsRehashing(d)) break;
     }
     return NULL; /* not found */
 }
 
-/* Remove an element, returning DICT_OK on success or DICT_ERR if the
+/* 从字典中删除 Remove an element, returning DICT_OK on success or DICT_ERR if the
  * element was not found. */
 int dictDelete(dict *ht, const void *key) {
     return dictGenericDelete(ht,key,0) ? DICT_OK : DICT_ERR;

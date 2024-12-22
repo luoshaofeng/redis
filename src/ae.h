@@ -92,8 +92,8 @@ typedef struct aeTimeEvent {
 
 /* A fired event */
 typedef struct aeFiredEvent {
-    int fd;
-    int mask;
+    int fd;     //文件描述符
+    int mask;   //文件描述符状态
 } aeFiredEvent;
 
 /* State of an event based program */
@@ -103,10 +103,10 @@ typedef struct aeEventLoop {
     long long timeEventNextId;
     time_t lastTime;     /* Used to detect system clock skew */
     aeFileEvent *events; /* 注册事件 Registered events */
-    aeFiredEvent *fired; /* 释放事件 Fired events */
+    aeFiredEvent *fired; /* 保存需要处理的事件 Fired events */
     aeTimeEvent *timeEventHead;
     int stop;
-    void *apidata; /* This is used for polling API specific data [aeApiState:保存文件描述符] */
+    void *apidata; /* 保存文件描述符 This is used for polling API specific data [aeApiState:保存文件描述符] */
     aeBeforeSleepProc *beforesleep;
     aeBeforeSleepProc *aftersleep;
     int flags;
