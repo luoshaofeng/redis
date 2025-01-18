@@ -159,7 +159,7 @@ int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask,
     }
     aeFileEvent *fe = &eventLoop->events[fd];
 
-    if (aeApiAddEvent(eventLoop, fd, mask) == -1)   // 根据mask添加读写文件描述符
+    if (aeApiAddEvent(eventLoop, fd, mask) == -1)   // 添加文件描述符的读写状态
         return AE_ERR;
     fe->mask |= mask;
     if (mask & AE_READABLE) fe->rfileProc = proc;

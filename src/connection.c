@@ -179,7 +179,7 @@ static int connSocketWrite(connection *conn, const void *data, size_t data_len) 
     return ret;
 }
 
-static int connSocketRead(connection *conn, void *buf, size_t buf_len) {
+static int connSocketRead(connection *conn, void *buf, size_t buf_len) {    // 从文件描述符读取数据
     int ret = read(conn->fd, buf, buf_len);
     if (!ret) {
         conn->state = CONN_STATE_CLOSED;

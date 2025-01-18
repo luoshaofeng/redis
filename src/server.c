@@ -2470,7 +2470,7 @@ void initServerConfig(void) {
      * Redis 5. However it is possible to revert it via redis.conf. */
     server.lua_always_replicate_commands = 1;
 
-    initConfigValues();
+    initConfigValues();     // 初始化默认配置
 }
 
 extern char **environ;
@@ -2734,7 +2734,7 @@ int listenToPort(int port, int *fds, int *count) {
             }
 
             if (*count == 1 || unsupported) {
-                /* Bind the IPv4 address as well. */
+                /* Bind the IPv4 address as well. */    //支持tcp6也支持tcp4
                 fds[*count] = anetTcpServer(server.neterr,port,NULL,
                     server.tcp_backlog);
                 if (fds[*count] != ANET_ERR) {
@@ -3365,14 +3365,14 @@ void call(client *c, int flags) {
     }
 
     start = server.ustime;
-    c->cmd->proc(c);
+    c->cmd->proc(c);        // 调用函数
     duration = ustime()-start;
     dirty = server.dirty-dirty;
     if (dirty < 0) dirty = 0;
 
     /* After executing command, we will close the client after writing entire
      * reply if it is set 'CLIENT_CLOSE_AFTER_COMMAND' flag. */
-    if (c->flags & CLIENT_CLOSE_AFTER_COMMAND) {
+    if (c->flags & CLIENT_CLOSE_AFTER_COMMAND) {        // 更新flag
         c->flags &= ~CLIENT_CLOSE_AFTER_COMMAND;
         c->flags |= CLIENT_CLOSE_AFTER_REPLY;
     }
@@ -3558,7 +3558,7 @@ int processCommand(client *c) {
      * go through checking for replication and QUIT will cause trouble
      * when FORCE_REPLICATION is enabled and would be implemented in
      * a regular command proc. */
-    if (!strcasecmp(c->argv[0]->ptr,"quit")) {
+    if (!strcasecmp(c->argv[0]->ptr,"quit")) {      // 处理退出命令
         addReply(c,shared.ok);
         c->flags |= CLIENT_CLOSE_AFTER_REPLY;
         return C_ERR;
@@ -3566,7 +3566,7 @@ int processCommand(client *c) {
 
     /* Now lookup the command and check ASAP about trivial error conditions
      * such as wrong arity, bad command name and so forth. */
-    c->cmd = c->lastcmd = lookupCommand(c->argv[0]->ptr);       //拿到操作命令
+    c->cmd = c->lastcmd = lookupCommand(c->argv[0]->ptr);       //从字典中拿到操作命令
     if (!c->cmd) {
         sds args = sdsempty();
         int i;
@@ -3577,7 +3577,7 @@ int processCommand(client *c) {
         sdsfree(args);
         return C_OK;
     } else if ((c->cmd->arity > 0 && c->cmd->arity != c->argc) ||
-               (c->argc < -c->cmd->arity)) {
+               (c->argc < -c->cmd->arity)) {        // 检查命令需要的参数
         rejectCommandFormat(c,"wrong number of arguments for '%s' command",
             c->cmd->name);
         return C_OK;
@@ -3602,7 +3602,7 @@ int processCommand(client *c) {
     }
 
     /* Check if the user can run this command according to the current
-     * ACLs. */
+     * ACLs. */ // 校验权限
     int acl_keypos;
     int acl_retval = ACLCheckCommandPerm(c,&acl_keypos);
     if (acl_retval != ACL_OK) {
@@ -5059,9 +5059,9 @@ void setupSignalHandlers(void) {
 
     /* When the SA_SIGINFO flag is set in sa_flags then sa_sigaction is used.
      * Otherwise, sa_handler is used. */
-    sigemptyset(&act.sa_mask);
+    sigemptyset(&act.sa_mask);      //清空信号集，不屏蔽其他信号
     act.sa_flags = 0;
-    act.sa_handler = sigShutdownHandler;
+    act.sa_handler = sigShutdownHandler;    //设置进程退出处理程序
     sigaction(SIGTERM, &act, NULL);
     sigaction(SIGINT, &act, NULL);
 
@@ -5333,7 +5333,7 @@ int main(int argc, char **argv) {
 #endif
     setlocale(LC_COLLATE,"");
     tzset(); /* Populates 'timezone' global. */
-    zmalloc_set_oom_handler(redisOutOfMemoryHandler);
+    zmalloc_set_oom_handler(redisOutOfMemoryHandler);   // 设置oom处理函数
     srand(time(NULL)^getpid());
     gettimeofday(&tv,NULL);
     init_genrand64(((long long) tv.tv_sec * 1000000 + tv.tv_usec) ^ getpid());
@@ -5360,7 +5360,7 @@ int main(int argc, char **argv) {
     server.executable = getAbsolutePath(argv[0]);  //保存可执行文件路径，以便重启
     server.exec_argv = zmalloc(sizeof(char*)*(argc+1));
     server.exec_argv[argc] = NULL;
-    for (j = 0; j < argc; j++) server.exec_argv[j] = zstrdup(argv[j]);
+    for (j = 0; j < argc; j++) server.exec_argv[j] = zstrdup(argv[j]);  // 保存启动命令
 
     /* We need to init sentinel right now as parsing the configuration file
      * in sentinel mode will have the effect of populating the sentinel

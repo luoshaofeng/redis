@@ -1496,7 +1496,7 @@ void evalGenericCommand(client *c, int evalsha) {
     server.lua_repl = PROPAGATE_AOF|PROPAGATE_REPL;
 
     /* Get the number of arguments that are keys */
-    if (getLongLongFromObjectOrReply(c,c->argv[2],&numkeys,NULL) != C_OK)
+    if (getLongLongFromObjectOrReply(c,c->argv[2],&numkeys,NULL) != C_OK)  // 拿到lua脚本key的个数
         return;
     if (numkeys > (c->argc - 3)) {
         addReplyError(c,"Number of keys can't be greater than number of args");

@@ -1024,7 +1024,7 @@ static void acceptCommonHandler(connection *conn, int flags, char *ip) {
         return;
     }
 
-    /* Create connection and client */
+    /* Create connection and client */ // 1. 设置conn非阻塞 2. 设置conn不延迟发包 3. 设置读处理函数readQueryFromClient 4. 初始化client结构体
     if ((c = createClient(conn)) == NULL) { //创建一个客户端
         serverLog(LL_WARNING,
             "Error registering fd event for the new client: %s (conn: %s)",
@@ -1615,10 +1615,10 @@ int processInlineBuffer(client *c) {
     size_t querylen;
 
     /* Search for end of line */
-    newline = strchr(c->querybuf+c->qb_pos,'\n');
+    newline = strchr(c->querybuf+c->qb_pos,'\n');       // 查找第一个\n符号的位置
 
     /* Nothing to do without a \r\n */
-    if (newline == NULL) {
+    if (newline == NULL) {      // 客户端请求找不到数据
         if (sdslen(c->querybuf)-c->qb_pos > PROTO_INLINE_MAX_SIZE) {
             addReplyError(c,"Protocol error: too big inline request");
             setProtocolError("too big inline request",c);
@@ -1627,14 +1627,14 @@ int processInlineBuffer(client *c) {
     }
 
     /* Handle the \r\n case. */
-    if (newline && newline != c->querybuf+c->qb_pos && *(newline-1) == '\r')
+    if (newline && newline != c->querybuf+c->qb_pos && *(newline-1) == '\r')   // 删掉/r符号
         newline--, linefeed_chars++;
 
     /* Split the input buffer up to the \r\n */
-    querylen = newline-(c->querybuf+c->qb_pos);
-    aux = sdsnewlen(c->querybuf+c->qb_pos,querylen);
-    argv = sdssplitargs(aux,&argc);
-    sdsfree(aux);
+    querylen = newline-(c->querybuf+c->qb_pos);     // 查询语句的长度
+    aux = sdsnewlen(c->querybuf+c->qb_pos,querylen);    // 取出一条命令
+    argv = sdssplitargs(aux,&argc);     // 解析请求命令
+    sdsfree(aux);       // 释放内存
     if (argv == NULL) {
         addReplyError(c,"Protocol error: unbalanced quotes in request");
         setProtocolError("unbalanced quotes in inline request",c);
@@ -1662,12 +1662,12 @@ int processInlineBuffer(client *c) {
     }
 
     /* Move querybuffer position to the next query in the buffer. */
-    c->qb_pos += querylen+linefeed_chars;
+    c->qb_pos += querylen+linefeed_chars;       // 更新已读的缓冲区进度
 
     /* Setup argv array on client structure */
     if (argc) {
-        if (c->argv) zfree(c->argv);
-        c->argv = zmalloc(sizeof(robj*)*argc);
+        if (c->argv) zfree(c->argv);        // 重置client的argv
+        c->argv = zmalloc(sizeof(robj*)*argc);  // 更新client的argv
         c->argv_len_sum = 0;
     }
 
@@ -1677,7 +1677,7 @@ int processInlineBuffer(client *c) {
         c->argc++;
         c->argv_len_sum += sdslen(argv[j]);
     }
-    zfree(argv);
+    zfree(argv);        // 释放空间
     return C_OK;
 }
 
@@ -1987,7 +1987,7 @@ void processInputBuffer(client *c) {    // 处理客户端缓存数据
         }
 
         if (c->reqtype == PROTO_REQ_INLINE) {
-            if (processInlineBuffer(c) != C_OK) break;
+            if (processInlineBuffer(c) != C_OK) break;      // 解析命令保存到client
             /* If the Gopher mode and we got zero or one argument, process
              * the request in Gopher mode. To avoid data race, Redis won't
              * support Gopher if enable io threads to read queries. */
@@ -2019,7 +2019,7 @@ void processInputBuffer(client *c) {    // 处理客户端缓存数据
             }
 
             /* We are finally ready to execute the command. */
-            if (processCommandAndResetClient(c) == C_ERR) {
+            if (processCommandAndResetClient(c) == C_ERR) {     // 执行这条命令
                 /* If the client is no longer valid, we avoid exiting this
                  * loop and trimming the client buffer later. So we return
                  * ASAP in that case. */
@@ -2045,7 +2045,7 @@ void readQueryFromClient(connection *conn) {
     if (postponeClientRead(c)) return;
 
     /* Update total number of reads on server */
-    server.stat_total_reads_processed++;
+    server.stat_total_reads_processed++;    //更新读次数
 
     readlen = PROTO_IOBUF_LEN;
     /* If this is a multi bulk request, and we are processing a bulk reply
@@ -2066,9 +2066,9 @@ void readQueryFromClient(connection *conn) {
 
     qblen = sdslen(c->querybuf);    //获取缓冲区的长度
     if (c->querybuf_peak < qblen) c->querybuf_peak = qblen; //更新querybuf的峰值
-    c->querybuf = sdsMakeRoomFor(c->querybuf, readlen);
-    nread = connRead(c->conn, c->querybuf+qblen, readlen);  // 从文件描述符获取数据
-    if (nread == -1) {
+    c->querybuf = sdsMakeRoomFor(c->querybuf, readlen); // 扩大字符串的可用空间
+    nread = connRead(c->conn, c->querybuf+qblen, readlen);  // 从文件描述符获取数据，从free空间读取
+    if (nread == -1) {      //读不到数据
         if (connGetState(conn) == CONN_STATE_CONNECTED) {
             return;
         } else {
@@ -2076,11 +2076,11 @@ void readQueryFromClient(connection *conn) {
             freeClientAsync(c);
             return;
         }
-    } else if (nread == 0) {
+    } else if (nread == 0) {        //链接关了
         serverLog(LL_VERBOSE, "Client closed connection");
         freeClientAsync(c);
         return;
-    } else if (c->flags & CLIENT_MASTER) {
+    } else if (c->flags & CLIENT_MASTER) {      // 有数据
         /* Append the query buffer to the pending (not applied) buffer
          * of the master. We'll use this buffer later in order to have a
          * copy of the string applied by the last command executed. */
@@ -2088,8 +2088,8 @@ void readQueryFromClient(connection *conn) {
                                         c->querybuf+qblen,nread);
     }
 
-    sdsIncrLen(c->querybuf,nread);
-    c->lastinteraction = server.unixtime;
+    sdsIncrLen(c->querybuf,nread);      // 更新缓冲区字符串的大小
+    c->lastinteraction = server.unixtime;       // 最后一次交互的时间
     if (c->flags & CLIENT_MASTER) c->read_reploff += nread; //主从同步相关
     server.stat_net_input_bytes += nread;
     if (sdslen(c->querybuf) > server.client_max_querybuf_len) { //检查缓存长度是否大于限制

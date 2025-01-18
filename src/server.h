@@ -814,10 +814,10 @@ typedef struct client {
                                replication stream that we are receiving from
                                the master. */
     size_t querybuf_peak;   /* 最近100ms或更长时间querybuf的峰值 Recent (100ms or more) peak of querybuf size. */
-    int argc;               /* Num of arguments of current command. */
-    robj **argv;            /* Arguments of current command. */
-    size_t argv_len_sum;    /* Sum of lengths of objects in argv list. */
-    struct redisCommand *cmd, *lastcmd;  /* Last command executed. */
+    int argc;               /* 命令个数 Num of arguments of current command. */
+    robj **argv;            /* 保存当前命令 Arguments of current command. */
+    size_t argv_len_sum;    /* 当前命令的长度 Sum of lengths of objects in argv list. */
+    struct redisCommand *cmd, *lastcmd;  /* 执行的命令函数 Last command executed. */
     user *user;             /* User associated with this connection. If the
                                user is set to NULL the connection can do
                                anything (admin). */
@@ -854,7 +854,7 @@ typedef struct client {
     multiState mstate;      /* MULTI/EXEC state */
     int btype;              /* Type of blocking op if CLIENT_BLOCKED. */
     blockingState bpop;     /* blocking state */
-    long long woff;         /* Last write global replication offset. */
+    long long woff;         /*  Last write global replication offset. */
     list *watched_keys;     /* Keys WATCHED for MULTI/EXEC CAS */
     dict *pubsub_channels;  /* channels a client is interested in (SUBSCRIBE) */
     list *pubsub_patterns;  /* patterns a client is interested in (SUBSCRIBE) */
@@ -1076,7 +1076,7 @@ struct redisServer {
     pthread_t main_thread_id;         /* Main thread id */
     char *configfile;           /* Absolute config file path, or NULL */
     char *executable;           /* Absolute executable file path. */
-    char **exec_argv;           /* Executable argv vector (copy). */
+    char **exec_argv;           /* 保存启动命令 Executable argv vector (copy). */
     int dynamic_hz;             /* Change hz value depending on # of clients. */
     int config_hz;              /* Configured HZ value. May be different than
                                    the actual 'hz' field value if dynamic-hz
@@ -1096,7 +1096,7 @@ struct redisServer {
     int arch_bits;              /* 32 or 64 depending on sizeof(long) */
     int cronloops;              /* Number of times the cron function run */
     char runid[CONFIG_RUN_ID_SIZE+1];  /* ID always different at every exec. */
-    int sentinel_mode;          /* True if this instance is a Sentinel. */
+    int sentinel_mode;          /* 标识是不是sentinel模式 True if this instance is a Sentinel. */
     size_t initial_memory_usage; /* Bytes used after initialization. */
     int always_show_logo;       /* Show logo even for non-stdout logging. */
     char *ignore_warnings;      /* Config: warnings that should be ignored. */
@@ -1129,7 +1129,7 @@ struct redisServer {
     list *clients_pending_write; /* There is to write or install handler. */
     list *clients_pending_read;  /* Client has pending read socket buffers. */
     list *slaves, *monitors;    /* List of slaves and MONITORs */
-    client *current_client;     /* Current client executing the command. */
+    client *current_client;     /* 当前执行的客户端 Current client executing the command. */
     rax *clients_timeout_table; /* 阻塞客户端的树根 Radix tree for blocked clients timeouts. */
     long fixed_time_expire;     /* 大于0，根据server.mstime判断过期键 If > 0, expire keys against server.mstime. */
     rax *clients_index;         /* Active clients dictionary by client ID. */
@@ -1160,7 +1160,7 @@ struct redisServer {
                         *xgroupCommand, *rpoplpushCommand;
     /* Fields used only for stats */
     time_t stat_starttime;          /* Server start time */
-    long long stat_numcommands;     /* Number of processed commands */
+    long long stat_numcommands;     /* 处理命令的个数 Number of processed commands */
     long long stat_numconnections;  /* 添加连接接收数 Number of connections received */
     long long stat_expiredkeys;     /* Number of expired keys */
     double stat_expired_stale_perc; /* Percentage of keys probably expired */
@@ -1521,7 +1521,7 @@ typedef int redisGetKeysProc(struct redisCommand *cmd, robj **argv, int argc, ge
 struct redisCommand {
     char *name;
     redisCommandProc *proc;
-    int arity;
+    int arity;      // 跟命令的请求参数相关，这个命令多少的个数，至少多少参数...
     char *sflags;   /* Flags as string representation, one char per flag. */
     uint64_t flags; /* The actual flags, obtained from the 'sflags' field. */
     /* Use a function to determine keys arguments in a command line.

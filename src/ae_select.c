@@ -33,7 +33,7 @@
 #include <string.h>
 
 typedef struct aeApiState {
-    fd_set rfds, wfds;
+    fd_set rfds, wfds;      // 监听文件描述符的读写状态
     /* We need to have a copy of the fd sets as it's not safe to reuse
      * FD sets after select(). */
     fd_set _rfds, _wfds;
@@ -62,8 +62,8 @@ static void aeApiFree(aeEventLoop *eventLoop) {
 static int aeApiAddEvent(aeEventLoop *eventLoop, int fd, int mask) {
     aeApiState *state = eventLoop->apidata;
 
-    if (mask & AE_READABLE) FD_SET(fd,&state->rfds);
-    if (mask & AE_WRITABLE) FD_SET(fd,&state->wfds);
+    if (mask & AE_READABLE) FD_SET(fd,&state->rfds);        //监听文件描述符的读状态
+    if (mask & AE_WRITABLE) FD_SET(fd,&state->wfds);        //监听文件描述符的写状态
     return 0;
 }
 

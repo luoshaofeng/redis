@@ -73,7 +73,7 @@ typedef struct aeFileEvent {
     int mask; /* one of AE_(READABLE|WRITABLE|BARRIER) */
     aeFileProc *rfileProc;  //读处理程序
     aeFileProc *wfileProc;  //写处理程序
-    void *clientData;
+    void *clientData;       // accept后的文件描述符来说是conn
 } aeFileEvent;
 
 /* Time event structure */
@@ -99,14 +99,14 @@ typedef struct aeFiredEvent {
 /* State of an event based program */
 typedef struct aeEventLoop {
     int maxfd;   /* highest file descriptor currently registered */
-    int setsize; /* max number of file descriptors tracked */
+    int setsize; /* 文件描述符的最大数量 max number of file descriptors tracked */
     long long timeEventNextId;
     time_t lastTime;     /* Used to detect system clock skew */
     aeFileEvent *events; /* 注册事件 Registered events */
     aeFiredEvent *fired; /* 保存需要处理的事件 Fired events */
-    aeTimeEvent *timeEventHead;
+    aeTimeEvent *timeEventHead; //aeCreateTimeEvent第一个创建
     int stop;
-    void *apidata; /* 保存文件描述符 This is used for polling API specific data [aeApiState:保存文件描述符] */
+    void *apidata; /* 监听文件描述符的读写状态 This is used for polling API specific data [aeApiState:保存文件描述符] */
     aeBeforeSleepProc *beforesleep;
     aeBeforeSleepProc *aftersleep;
     int flags;

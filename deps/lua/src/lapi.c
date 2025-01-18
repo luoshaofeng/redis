@@ -64,7 +64,7 @@ static TValue *index2adr (lua_State *L, int idx) {
       sethvalue(L, &L->env, func->c.env);
       return &L->env;
     }
-    case LUA_GLOBALSINDEX: return gt(L);
+    case LUA_GLOBALSINDEX: return gt(L);    // 返回l_gt
     default: {
       Closure *func = curr_func(L);
       idx = LUA_GLOBALSINDEX - idx;
