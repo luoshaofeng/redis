@@ -251,7 +251,7 @@ extern int configOOMScoreAdjValuesDefaults[CONFIG_OOM_COUNT];
 #define CLIENT_LUA_DEBUG_SYNC (1<<26)  /* EVAL debugging without fork() */
 #define CLIENT_MODULE (1<<27) /* Non connected client used by some module. */
 #define CLIENT_PROTECTED (1<<28) /* Client should not be freed for now. */
-#define CLIENT_PENDING_READ (1<<29) /* The client has pending reads and was put
+#define CLIENT_PENDING_READ (1<<29) /* 在队列里面准备去读 The client has pending reads and was put
                                        in the list of clients we can read
                                        from. */
 #define CLIENT_PENDING_COMMAND (1<<30) /* 客户端有待执行的命令 Used in threaded I/O to signal after
@@ -1141,8 +1141,8 @@ struct redisServer {
     int protected_mode;         /* Don't accept external connections. */
     int gopher_enabled;         /* If true the server will reply to gopher
                                    queries. Will still serve RESP2 queries. */
-    int io_threads_num;         /* Number of IO threads to use. */
-    int io_threads_do_reads;    /* Read and parse from IO threads? */
+    int io_threads_num;         /* 多线程个数 Number of IO threads to use. */
+    int io_threads_do_reads;    /* 是否启用多线程 Read and parse from IO threads? */
     int io_threads_active;      /* Is IO threads currently active? */
     long long events_processed_while_blocked; /* processEventsWhileBlocked() */
 

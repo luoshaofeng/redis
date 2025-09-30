@@ -2135,7 +2135,7 @@ void beforeSleep(struct aeEventLoop *eventLoop) {//两个函数调用：aeMain�
     handleBlockedClientsTimeout();  //处理超时的客户端
 
     /* We should handle pending reads clients ASAP after event loop. */
-    handleClientsWithPendingReadsUsingThreads();
+    handleClientsWithPendingReadsUsingThreads();        // 多线程处理客户端请求
 
     /* Handle TLS pending data. (must be done before flushAppendOnlyFile) */
     tlsProcessPendingData();
@@ -3551,7 +3551,7 @@ void rejectCommandFormat(client *c, const char *fmt, ...) {
  * If C_OK is returned the client is still alive and valid and
  * other operations can be performed by the caller. Otherwise
  * if C_ERR is returned the client was destroyed (i.e. after QUIT). */
-int processCommand(client *c) {
+int processCommand(client *c) {     // 处理redis命令
     moduleCallCommandFilters(c);
 
     /* The QUIT command is handled separately. Normal command procs will
