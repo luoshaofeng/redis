@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.20 FATAL_ERROR)
 project(redis VERSION 6.0)
 
 if (NOT CMAKE_BUILD_TYPE)
@@ -29,6 +29,7 @@ add_subdirectory(deps)
 add_subdirectory(src/modules)
 
 set(SRC_SERVER_TMP
+        src/setcpuaffinity.c
         src/crcspeed.c
         src/crcspeed.h
         src/sha256.c

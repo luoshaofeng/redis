@@ -963,7 +963,13 @@ int hex_digit_to_int(char c) {
  * quotes or closed quotes followed by non space characters
  * as in: "foo"bar or "foo'
  */
-sds *sdssplitargs(const char *line, int *argc) {    // 解析命令，解析的个数保存到argc
+// 解析命令，解析的个数保存到argc
+// SET mykey "hello world"
+// 解析成
+// argv[0] = "SET"
+// argv[1] = "mykey"
+// argv[2] = "hello world"
+sds *sdssplitargs(const char *line, int *argc) {
     const char *p = line;
     char *current = NULL;
     char **vector = NULL;

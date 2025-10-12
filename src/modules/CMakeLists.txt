@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.9)
+cmake_minimum_required(VERSION 3.20)
 set(CMAKE_BUILD_TYPE "Debug")
 add_library(helloworld SHARED helloworld.c)
 set_target_properties(helloworld PROPERTIES PREFIX "" SUFFIX ".so")

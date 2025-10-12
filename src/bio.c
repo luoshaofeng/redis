@@ -100,11 +100,15 @@ void bioInit(void) {
     int j;
 
     /* Initialization of state vars and objects */
-    for (j = 0; j < BIO_NUM_OPS; j++) {     //初始化bio
-        pthread_mutex_init(&bio_mutex[j],NULL); //初始化线程锁
-        pthread_cond_init(&bio_newjob_cond[j],NULL);    //初始化条件变量
-        pthread_cond_init(&bio_step_cond[j],NULL);  //初始化条件变量
-        bio_jobs[j] = listCreate();     //创建队列
+    for (j = 0; j < BIO_NUM_OPS; j++) {
+        //初始化bio
+        pthread_mutex_init(&bio_mutex[j],NULL);
+        //初始化线程锁
+        pthread_cond_init(&bio_newjob_cond[j],NULL);
+        //初始化条件变量
+        pthread_cond_init(&bio_step_cond[j],NULL);
+        //创建队列
+        bio_jobs[j] = listCreate();
         bio_pending[j] = 0;
     }
 

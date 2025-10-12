@@ -64,16 +64,24 @@ struct aeEventLoop;
 
 /* Types and data structures */
 typedef void aeFileProc(struct aeEventLoop *eventLoop, int fd, void *clientData, int mask);
+
 typedef int aeTimeProc(struct aeEventLoop *eventLoop, long long id, void *clientData);
+
 typedef void aeEventFinalizerProc(struct aeEventLoop *eventLoop, void *clientData);
+
 typedef void aeBeforeSleepProc(struct aeEventLoop *eventLoop);
 
 /* File event structure */
 typedef struct aeFileEvent {
+    // AE_(READABLE|WRITABLE|BARRIER)
     int mask; /* one of AE_(READABLE|WRITABLE|BARRIER) */
-    aeFileProc *rfileProc;  //读处理程序
-    aeFileProc *wfileProc;  //写处理程序
-    void *clientData;       // accept后的文件描述符来说是conn
+    // 读处理程序
+    // 对于监听socket来说：处理函数是 acceptTcpHandler
+    // 对于已连接socket来说：处理函数是 connSocketEventHandler
+    aeFileProc *rfileProc;
+    aeFileProc *wfileProc; //写处理程序
+    // accept后的文件描述符来说是 connection 结构
+    void *clientData;
 } aeFileEvent;
 
 /* Time event structure */
@@ -92,46 +100,71 @@ typedef struct aeTimeEvent {
 
 /* A fired event */
 typedef struct aeFiredEvent {
-    int fd;     //文件描述符
-    int mask;   //文件描述符状态
+    int fd; //文件描述符
+    int mask; //文件描述符状态
 } aeFiredEvent;
 
 /* State of an event based program */
 typedef struct aeEventLoop {
-    int maxfd;   /* highest file descriptor currently registered */
-    int setsize; /* 文件描述符的最大数量 max number of file descriptors tracked */
+    // 初始化的时候是-1
+    // 保存的是当前redis中最大的文件描述符
+    int maxfd; /* highest file descriptor currently registered */
+    // 文件描述符的最大数量
+    int setsize; /* max number of file descriptors tracked */
     long long timeEventNextId;
-    time_t lastTime;     /* Used to detect system clock skew */
-    aeFileEvent *events; /* 注册事件 Registered events */
-    aeFiredEvent *fired; /* 保存需要处理的事件 Fired events */
+    time_t lastTime; /* Used to detect system clock skew */
+    // 注册事件，epoll节点注册的事件（文件描述符）
+    aeFileEvent *events; /* Registered events */
+    // 从epoll读取出来的事件会保存到这里
+    aeFiredEvent *fired; /* Fired events */
     aeTimeEvent *timeEventHead; //aeCreateTimeEvent第一个创建
     int stop;
-    void *apidata; /* 监听文件描述符的读写状态 This is used for polling API specific data [aeApiState:保存文件描述符] */
+    // 监听文件描述符的读写状态 aeApiState
+    // epoll的根在这里
+    void *apidata; /* This is used for polling API specific data [aeApiState:保存文件描述符] */
+    // beforeSleep
     aeBeforeSleepProc *beforesleep;
+    // afterSleep
     aeBeforeSleepProc *aftersleep;
     int flags;
 } aeEventLoop;
 
 /* Prototypes */
 aeEventLoop *aeCreateEventLoop(int setsize);
+
 void aeDeleteEventLoop(aeEventLoop *eventLoop);
+
 void aeStop(aeEventLoop *eventLoop);
+
 int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask,
-        aeFileProc *proc, void *clientData);
+                      aeFileProc *proc, void *clientData);
+
 void aeDeleteFileEvent(aeEventLoop *eventLoop, int fd, int mask);
+
 int aeGetFileEvents(aeEventLoop *eventLoop, int fd);
+
 long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
-        aeTimeProc *proc, void *clientData,
-        aeEventFinalizerProc *finalizerProc);
+                            aeTimeProc *proc, void *clientData,
+                            aeEventFinalizerProc *finalizerProc);
+
 int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id);
+
 int aeProcessEvents(aeEventLoop *eventLoop, int flags);
+
 int aeWait(int fd, int mask, long long milliseconds);
+
 void aeMain(aeEventLoop *eventLoop);
+
 char *aeGetApiName(void);
+
 void aeSetBeforeSleepProc(aeEventLoop *eventLoop, aeBeforeSleepProc *beforesleep);
+
 void aeSetAfterSleepProc(aeEventLoop *eventLoop, aeBeforeSleepProc *aftersleep);
+
 int aeGetSetSize(aeEventLoop *eventLoop);
+
 int aeResizeSetSize(aeEventLoop *eventLoop, int setsize);
+
 void aeSetDontWait(aeEventLoop *eventLoop, int noWait);
 
 #endif

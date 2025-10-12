@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 2019, Redis Labs
  * All rights reserved.
@@ -55,18 +54,32 @@ typedef void (*ConnectionCallbackFunc)(struct connection *conn);
 
 typedef struct ConnectionType {
     void (*ae_handler)(struct aeEventLoop *el, int fd, void *clientData, int mask);
-    int (*connect)(struct connection *conn, const char *addr, int port, const char *source_addr, ConnectionCallbackFunc connect_handler);
+
+    int (*connect)(struct connection *conn, const char *addr, int port, const char *source_addr,
+                   ConnectionCallbackFunc connect_handler);
+
     int (*write)(struct connection *conn, const void *data, size_t data_len);
+
     int (*read)(struct connection *conn, void *buf, size_t buf_len);
+
     void (*close)(struct connection *conn);
+
     int (*accept)(struct connection *conn, ConnectionCallbackFunc accept_handler);
+
     int (*set_write_handler)(struct connection *conn, ConnectionCallbackFunc handler, int barrier);
+
     int (*set_read_handler)(struct connection *conn, ConnectionCallbackFunc handler);
+
     const char *(*get_last_error)(struct connection *conn);
+
     int (*blocking_connect)(struct connection *conn, const char *addr, int port, long long timeout);
+
     ssize_t (*sync_write)(struct connection *conn, char *ptr, ssize_t size, long long timeout);
+
     ssize_t (*sync_read)(struct connection *conn, char *ptr, ssize_t size, long long timeout);
+
     ssize_t (*sync_readline)(struct connection *conn, char *ptr, ssize_t size, long long timeout);
+
     int (*get_type)(struct connection *conn);
 } ConnectionType;
 
@@ -79,6 +92,7 @@ struct connection {
     void *private_data;
     ConnectionCallbackFunc conn_handler;
     ConnectionCallbackFunc write_handler;
+    // 处理客户端请求的处理函数： readQueryFromClient
     ConnectionCallbackFunc read_handler;
     int fd;
 };
@@ -115,7 +129,7 @@ static inline int connAccept(connection *conn, ConnectionCallbackFunc accept_han
  * not be expected.
  */
 static inline int connConnect(connection *conn, const char *addr, int port, const char *src_addr,
-        ConnectionCallbackFunc connect_handler) {
+                              ConnectionCallbackFunc connect_handler) {
     return conn->type->connect(conn, addr, port, src_addr, connect_handler);
 }
 
@@ -204,34 +218,53 @@ static inline int connGetType(connection *conn) {
 }
 
 connection *connCreateSocket();
+
 connection *connCreateAcceptedSocket(int fd);
 
 connection *connCreateTLS();
+
 connection *connCreateAcceptedTLS(int fd, int require_auth);
 
 void connSetPrivateData(connection *conn, void *data);
+
 void *connGetPrivateData(connection *conn);
+
 int connGetState(connection *conn);
+
 int connHasWriteHandler(connection *conn);
+
 int connHasReadHandler(connection *conn);
+
 int connGetSocketError(connection *conn);
 
 /* anet-style wrappers to conns */
 int connBlock(connection *conn);
+
 int connNonBlock(connection *conn);
+
 int connEnableTcpNoDelay(connection *conn);
+
 int connDisableTcpNoDelay(connection *conn);
+
 int connKeepAlive(connection *conn, int interval);
+
 int connSendTimeout(connection *conn, long long ms);
+
 int connRecvTimeout(connection *conn, long long ms);
+
 int connPeerToString(connection *conn, char *ip, size_t ip_len, int *port);
+
 int connFormatPeer(connection *conn, char *buf, size_t buf_len);
+
 int connSockName(connection *conn, char *ip, size_t ip_len, int *port);
+
 const char *connGetInfo(connection *conn, char *buf, size_t buf_len);
 
 /* Helpers for tls special considerations */
 sds connTLSGetPeerCert(connection *conn);
+
 int tlsHasPendingData();
+
 int tlsProcessPendingData();
 
 #endif  /* __REDIS_CONNECTION_H */

@@ -74,6 +74,7 @@ ConnectionType CT_Socket;
  * be embedded in different structs, not just client.
  */
 
+// conn的socket
 connection *connCreateSocket() {
     connection *conn = zcalloc(sizeof(connection));
     conn->type = &CT_Socket;
@@ -92,16 +93,18 @@ connection *connCreateSocket() {
  * is not in an error state (which is not possible for a socket connection,
  * but could but possible with other protocols).
  */
-connection *connCreateAcceptedSocket(int fd) {  // 创建一个链接
+connection *connCreateAcceptedSocket(int fd) {
+    // 创建一个链接
     connection *conn = connCreateSocket();
     conn->fd = fd;
+    // 状态设置为accepting
     conn->state = CONN_STATE_ACCEPTING;
     return conn;
 }
 
 static int connSocketConnect(connection *conn, const char *addr, int port, const char *src_addr,
-        ConnectionCallbackFunc connect_handler) {
-    int fd = anetTcpNonBlockBestEffortBindConnect(NULL,addr,port,src_addr);
+                             ConnectionCallbackFunc connect_handler) {
+    int fd = anetTcpNonBlockBestEffortBindConnect(NULL, addr, port, src_addr);
     if (fd == -1) {
         conn->state = CONN_STATE_ERROR;
         conn->last_errno = errno;
@@ -113,7 +116,7 @@ static int connSocketConnect(connection *conn, const char *addr, int port, const
 
     conn->conn_handler = connect_handler;
     aeCreateFileEvent(server.el, conn->fd, AE_WRITABLE,
-            conn->type->ae_handler, conn);
+                      conn->type->ae_handler, conn);
 
     return C_OK;
 }
@@ -147,8 +150,8 @@ void *connGetPrivateData(connection *conn) {
 /* Close the connection and free resources. */
 static void connSocketClose(connection *conn) {
     if (conn->fd != -1) {
-        aeDeleteFileEvent(server.el,conn->fd,AE_READABLE);
-        aeDeleteFileEvent(server.el,conn->fd,AE_WRITABLE);
+        aeDeleteFileEvent(server.el, conn->fd,AE_READABLE);
+        aeDeleteFileEvent(server.el, conn->fd,AE_WRITABLE);
         close(conn->fd);
         conn->fd = -1;
     }
@@ -179,7 +182,8 @@ static int connSocketWrite(connection *conn, const void *data, size_t data_len) 
     return ret;
 }
 
-static int connSocketRead(connection *conn, void *buf, size_t buf_len) {    // 从文件描述符读取数据
+static int connSocketRead(connection *conn, void *buf, size_t buf_len) {
+    // 从文件描述符读取数据
     int ret = read(conn->fd, buf, buf_len);
     if (!ret) {
         conn->state = CONN_STATE_CLOSED;
@@ -195,6 +199,7 @@ static int connSocketRead(connection *conn, void *buf, size_t buf_len) {    // �
 
     return ret;
 }
+
 // 设置accept处理函数
 static int connSocketAccept(connection *conn, ConnectionCallbackFunc accept_handler) {
     int ret = C_OK;
@@ -203,7 +208,7 @@ static int connSocketAccept(connection *conn, ConnectionCallbackFunc accept_hand
     conn->state = CONN_STATE_CONNECTED; //设置状态为已连接
 
     connIncrRefs(conn);
-    if (!callHandler(conn, accept_handler)) ret = C_ERR;    //调用处理函数
+    if (!callHandler(conn, accept_handler)) ret = C_ERR; //调用处理函数
     connDecrRefs(conn);
 
     return ret;
@@ -226,10 +231,10 @@ static int connSocketSetWriteHandler(connection *conn, ConnectionCallbackFunc fu
     else
         conn->flags &= ~CONN_FLAG_WRITE_BARRIER;
     if (!conn->write_handler)
-        aeDeleteFileEvent(server.el,conn->fd,AE_WRITABLE);
-    else
-        if (aeCreateFileEvent(server.el,conn->fd,AE_WRITABLE,
-                    conn->type->ae_handler,conn) == AE_ERR) return C_ERR;
+        aeDeleteFileEvent(server.el, conn->fd,AE_WRITABLE);
+    else if (aeCreateFileEvent(server.el, conn->fd,AE_WRITABLE,
+                               conn->type->ae_handler, conn) == AE_ERR)
+        return C_ERR;
     return C_OK;
 }
 
@@ -240,11 +245,12 @@ static int connSocketSetReadHandler(connection *conn, ConnectionCallbackFunc fun
     if (func == conn->read_handler) return C_OK;
 
     conn->read_handler = func;
+    // 同时将文件描述符添加到epoll中，该节点的处理函数是 connSocketEventHandler
     if (!conn->read_handler)
-        aeDeleteFileEvent(server.el,conn->fd,AE_READABLE);
-    else
-        if (aeCreateFileEvent(server.el,conn->fd,
-                    AE_READABLE,conn->type->ae_handler,conn) == AE_ERR) return C_ERR;
+        aeDeleteFileEvent(server.el, conn->fd,AE_READABLE);
+    else if (aeCreateFileEvent(server.el, conn->fd,
+                               AE_READABLE, conn->type->ae_handler, conn) == AE_ERR)
+        return C_ERR;
     return C_OK;
 }
 
@@ -252,15 +258,13 @@ static const char *connSocketGetLastError(connection *conn) {
     return strerror(conn->last_errno);
 }
 
-static void connSocketEventHandler(struct aeEventLoop *el, int fd, void *clientData, int mask)
-{
+static void connSocketEventHandler(struct aeEventLoop *el, int fd, void *clientData, int mask) {
     UNUSED(el);
     UNUSED(fd);
     connection *conn = clientData;
 
     if (conn->state == CONN_STATE_CONNECTING &&
-            (mask & AE_WRITABLE) && conn->conn_handler) {
-
+        (mask & AE_WRITABLE) && conn->conn_handler) {
         int conn_error = connGetSocketError(conn);
         if (conn_error) {
             conn->last_errno = conn_error;
@@ -269,7 +273,7 @@ static void connSocketEventHandler(struct aeEventLoop *el, int fd, void *clientD
             conn->state = CONN_STATE_CONNECTED;
         }
 
-        if (!conn->write_handler) aeDeleteFileEvent(server.el,conn->fd,AE_WRITABLE);
+        if (!conn->write_handler) aeDeleteFileEvent(server.el, conn->fd,AE_WRITABLE);
 
         if (!callHandler(conn, conn->conn_handler)) return;
         conn->conn_handler = NULL;
@@ -307,7 +311,7 @@ static void connSocketEventHandler(struct aeEventLoop *el, int fd, void *clientD
 }
 
 static int connSocketBlockingConnect(connection *conn, const char *addr, int port, long long timeout) {
-    int fd = anetTcpNonBlockConnect(NULL,addr,port);
+    int fd = anetTcpNonBlockConnect(NULL, addr, port);
     if (fd == -1) {
         conn->state = CONN_STATE_ERROR;
         conn->last_errno = errno;
@@ -394,6 +398,7 @@ int connNonBlock(connection *conn) {
     if (conn->fd == -1) return C_ERR;
     return anetNonBlock(NULL, conn->fd);
 }
+
 // 不延迟发送包
 int connEnableTcpNoDelay(connection *conn) {
     if (conn->fd == -1) return C_ERR;
@@ -428,7 +433,6 @@ int connGetState(connection *conn) {
  * For sockets, we always return "fd=<fdnum>" to maintain compatibility.
  */
 const char *connGetInfo(connection *conn, char *buf, size_t buf_len) {
-    snprintf(buf, buf_len-1, "fd=%i", conn->fd);
+    snprintf(buf, buf_len - 1, "fd=%i", conn->fd);
     return buf;
 }
-
