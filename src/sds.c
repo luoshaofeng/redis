@@ -86,24 +86,29 @@ static inline char sdsReqType(size_t string_size) {
  * You can print the string with printf() as there is an implicit \0 at the
  * end of the string. However the string is binary safe and can contain
  * \0 characters in the middle, as the length is stored in the sds header. */
-sds sdsnewlen(const void *init, size_t initlen) {       // 创建指定长度的字符串，从init拷贝
+// 创建指定长度的字符串，从init拷贝
+sds sdsnewlen(const void *init, size_t initlen) {
     void *sh;
     sds s;
     char type = sdsReqType(initlen);
     /* Empty strings are usually created in order to append. Use type 8
      * since type 5 is not good at this. */
     if (type == SDS_TYPE_5 && initlen == 0) type = SDS_TYPE_8;
+    // string头大小
     int hdrlen = sdsHdrSize(type);
     unsigned char *fp; /* flags pointer. */
 
     assert(initlen + hdrlen + 1 > initlen); /* Catch size_t overflow */
+    // 分配内存
     sh = s_malloc(hdrlen+initlen+1);
     if (sh == NULL) return NULL;
     if (init==SDS_NOINIT)
         init = NULL;
     else if (!init)
-        memset(sh, 0, hdrlen+initlen+1);
+        memset(sh, 0, hdrlen+initlen+1);        // 初始化sh的值为0
+    // 指向sh->buf
     s = (char*)sh+hdrlen;
+    // 指向sh->flag
     fp = ((unsigned char*)s)-1;
     switch(type) {
         case SDS_TYPE_5: {
@@ -139,8 +144,10 @@ sds sdsnewlen(const void *init, size_t initlen) {       // 创建指定长度的
             break;
         }
     }
+    // 将数据拷贝到s中
     if (initlen && init)
         memcpy(s, init, initlen);
+    // 末尾加上'\0'，和c一样
     s[initlen] = '\0';
     return s;
 }

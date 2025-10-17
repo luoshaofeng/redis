@@ -634,6 +634,7 @@ typedef struct RedisModuleDigest {
 /* Objects encoding. Some kind of objects like Strings and Hashes can be
  * internally represented in multiple ways. The 'encoding' field of the object
  * is set to one of this fields for this object. */
+// 对象的原始表示
 #define OBJ_ENCODING_RAW 0     /* Raw representation */
 #define OBJ_ENCODING_INT 1     /* Encoded as integer */
 #define OBJ_ENCODING_HT 2      /* Encoded as hash table */
@@ -655,12 +656,17 @@ typedef struct RedisModuleDigest {
 #define OBJ_FIRST_SPECIAL_REFCOUNT OBJ_STATIC_REFCOUNT
 
 typedef struct redisObject {
+    // 对象类型
     unsigned type: 4;
     unsigned encoding: 4;
+    // 正常占32位。LRU_BITS指定这个字段占24位
+    // 记录redis对象的访问时间(lru)或者访问频率(lfu)，取决于redis的淘汰策略（内存淘汰用这个字段）
     unsigned lru: LRU_BITS; /* LRU time (relative to global lru_clock) or
                             * LFU data (least significant 8 bits frequency
                             * and most significant 16 bits access time). */
+    // 引用计数，表示当前对象被多少个地方引用
     int refcount;
+    // redis->type的实际实现对象
     void *ptr;
 } robj;
 

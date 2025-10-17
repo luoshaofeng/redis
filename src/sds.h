@@ -42,16 +42,23 @@ extern const char *SDS_NOINIT;
 
 typedef char *sds;
 
+// __attribute__((__packed__))：不要对成员结构做内存对齐
+
 /* Note: sdshdr5 is never used, we just access the flags byte directly.
  * However is here to document the layout of type 5 SDS strings. */
 struct __attribute__ ((__packed__)) sdshdr5 {
     unsigned char flags; /* 3 lsb of type, and 5 msb of string length */
+    // sizeof(sdshdr5)时，buf不算字节
     char buf[];
 };
 struct __attribute__ ((__packed__)) sdshdr8 {
+    // 字符串已使用的长度
     uint8_t len; /* used */
+    // 字符串分配的空间
     uint8_t alloc; /* excluding the header and null terminator */
+    // 只使用到低3位
     unsigned char flags; /* 3 lsb of type, 5 unused bits */
+    // 实际保存字符串的内存
     char buf[];
 };
 struct __attribute__ ((__packed__)) sdshdr16 {
@@ -80,6 +87,7 @@ struct __attribute__ ((__packed__)) sdshdr64 {
 #define SDS_TYPE_64 4
 #define SDS_TYPE_MASK 7
 #define SDS_TYPE_BITS 3
+// 定义一个局部变量sh，指向sds的头
 #define SDS_HDR_VAR(T,s) struct sdshdr##T *sh = (void*)((s)-(sizeof(struct sdshdr##T)));
 #define SDS_HDR(T,s) ((struct sdshdr##T *)((s)-(sizeof(struct sdshdr##T))))
 #define SDS_TYPE_5_LEN(f) ((f)>>SDS_TYPE_BITS)
