@@ -261,7 +261,8 @@ extern int configOOMScoreAdjValuesDefaults[CONFIG_OOM_COUNT];
 #define CLIENT_LUA_DEBUG_SYNC (1<<26)  /* EVAL debugging without fork() */
 #define CLIENT_MODULE (1<<27) /* Non connected client used by some module. */
 #define CLIENT_PROTECTED (1<<28) /* Client should not be freed for now. */
-#define CLIENT_PENDING_READ (1<<29) /* 在队列里面准备去读 The client has pending reads and was put
+//在队列里面准备去读
+#define CLIENT_PENDING_READ (1<<29) /* The client has pending reads and was put
                                        in the list of clients we can read
                                        from. */
 // 客户端有待执行的命令
@@ -1181,6 +1182,7 @@ struct redisServer {
     list *clients_to_close; /* Clients to close asynchronously */
     // 客户端待入写数据
     list *clients_pending_write; /* There is to write or install handler. */
+    // 客户端待读取数据
     list *clients_pending_read; /* Client has pending read socket buffers. */
     list *slaves, *monitors; /* List of slaves and MONITORs */
     // 当前执行的客户端命令
