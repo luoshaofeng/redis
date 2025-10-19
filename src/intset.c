@@ -106,6 +106,7 @@ intset *intsetNew(void) {
 static intset *intsetResize(intset *is, uint32_t len) {
     uint64_t size = (uint64_t)len*intrev32ifbe(is->encoding);
     assert(size <= SIZE_MAX - sizeof(intset));
+    // 重新分配一块连续的空间
     is = zrealloc(is,sizeof(intset)+size);
     return is;
 }
@@ -114,6 +115,7 @@ static intset *intsetResize(intset *is, uint32_t len) {
  * sets "pos" to the position of the value within the intset. Return 0 when
  * the value is not present in the intset and sets "pos" to the position
  * where "value" can be inserted. */
+// 二分查找
 static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
     int min = 0, max = intrev32ifbe(is->length)-1, mid = -1;
     int64_t cur = -1;
@@ -156,27 +158,41 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
 }
 
 /* Upgrades the intset to a larger encoding and inserts the given integer. */
+// 1. 编码类型发生变化导致的整个集合升级
+// 2. intset是一个升序的集合
+// 3. 编码发生变化，这个新增的值要么是最大值，要么是最小值，所以根据value的正负来选择从头插入 还是 尾插入
 static intset *intsetUpgradeAndAdd(intset *is, int64_t value) {
+    // 当前编码值
     uint8_t curenc = intrev32ifbe(is->encoding);
+    // 新的编码值
     uint8_t newenc = _intsetValueEncoding(value);
+    // 当前的数组长度
     int length = intrev32ifbe(is->length);
+    // 当前值是正数还是负数。正数的话新值插入到尾部，负数的话新值插入到头部
     int prepend = value < 0 ? 1 : 0;
 
     /* First set new encoding and resize */
     is->encoding = intrev32ifbe(newenc);
+    // 调整intset集合的大小
     is = intsetResize(is,intrev32ifbe(is->length)+1);
 
     /* Upgrade back-to-front so we don't overwrite values.
      * Note that the "prepend" variable is used to make sure we have an empty
      * space at either the beginning or the end of the intset. */
+    // 从后往前更新，不会覆盖到原值
+    // 1. 根据旧编码当前到当前length位置的值
+    // 2. 将旧值的编码大小改变，然后重新设置到intset
+    // 3. value是负数往下标后一位挪，value是正数保持原下标不动
     while(length--)
         _intsetSet(is,length+prepend,_intsetGetEncoded(is,length,curenc));
 
     /* Set the value at the beginning or the end. */
+    // value是负数，设置到头部
     if (prepend)
         _intsetSet(is,0,value);
     else
-        _intsetSet(is,intrev32ifbe(is->length),value);
+        _intsetSet(is,intrev32ifbe(is->length),value);      // value是负数，设置到尾部
+    // 更新数组的长度
     is->length = intrev32ifbe(intrev32ifbe(is->length)+1);
     return is;
 }
@@ -203,41 +219,54 @@ static void intsetMoveTail(intset *is, uint32_t from, uint32_t to) {
 }
 
 /* Insert an integer in the intset */
+// success：是否插入成功。更新时返回0，插入返回1
 intset *intsetAdd(intset *is, int64_t value, uint8_t *success) {
+    // 获取当前值的编码类型
     uint8_t valenc = _intsetValueEncoding(value);
     uint32_t pos;
+    // 默认是插入操作
     if (success) *success = 1;
 
     /* Upgrade encoding if necessary. If we need to upgrade, we know that
      * this value should be either appended (if > 0) or prepended (if < 0),
      * because it lies outside the range of existing values. */
+    // 如果新的值编码所占用的空间大小 大于 旧值所占用的空间大小
     if (valenc > intrev32ifbe(is->encoding)) {
         /* This always succeeds, so we don't need to curry *success. */
+        // 原集合中所有数组都要升级
         return intsetUpgradeAndAdd(is,value);
     } else {
         /* Abort if the value is already present in the set.
          * This call will populate "pos" with the right position to insert
          * the value when it cannot be found. */
+        // 在集合中搜索这个元素值，并把位置读取出来
         if (intsetSearch(is,value,&pos)) {
+            // 更新操作，success置为0
             if (success) *success = 0;
             return is;
         }
 
         is = intsetResize(is,intrev32ifbe(is->length)+1);
+        // 元素往后挪，给插入的元素让位置
         if (pos < intrev32ifbe(is->length)) intsetMoveTail(is,pos,pos+1);
     }
 
+    // 设置插入元素
     _intsetSet(is,pos,value);
+    // 更新长度
     is->length = intrev32ifbe(intrev32ifbe(is->length)+1);
     return is;
 }
 
 /* Delete integer from intset */
 intset *intsetRemove(intset *is, int64_t value, int *success) {
+    // 获取当前value的编码
     uint8_t valenc = _intsetValueEncoding(value);
     uint32_t pos;
     if (success) *success = 0;
 
+    // 小优化：编码值 大于当前集合的编码值的话，肯定不在集合中，也就不用搜素了
+    // 二分查找元素，然后将后面的元素往前挪，直接覆盖掉
     if (valenc <= intrev32ifbe(is->encoding) && intsetSearch(is,value,&pos)) {
         uint32_t len = intrev32ifbe(is->length);
 
@@ -246,6 +275,7 @@ intset *intsetRemove(intset *is, int64_t value, int *success) {
 
         /* Overwrite value with tail and update length */
         if (pos < (len-1)) intsetMoveTail(is,pos+1,pos);
+        // 调整集合大小
         is = intsetResize(is,len-1);
         is->length = intrev32ifbe(len-1);
     }
