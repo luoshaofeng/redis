@@ -139,10 +139,15 @@ void bioCreateBackgroundJob(int type, void *arg1, void *arg2, void *arg3) {
     job->arg1 = arg1;
     job->arg2 = arg2;
     job->arg3 = arg3;
+    // 加锁
     pthread_mutex_lock(&bio_mutex[type]);
+    // 添加到job链表中
     listAddNodeTail(bio_jobs[type],job);
+    // 任务数加1
     bio_pending[type]++;
+    // 唤醒线程
     pthread_cond_signal(&bio_newjob_cond[type]);
+    // 解锁
     pthread_mutex_unlock(&bio_mutex[type]);
 }
 

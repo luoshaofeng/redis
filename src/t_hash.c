@@ -44,15 +44,21 @@ void hashTypeTryConversion(robj *o, robj **argv, int start, int end) {
     if (o->encoding != OBJ_ENCODING_ZIPLIST) return;
 
     for (i = start; i <= end; i++) {
+        // 不是字符串编码则跳过
         if (!sdsEncodedObject(argv[i]))
             continue;
+        // 计算字符串的长度
         size_t len = sdslen(argv[i]->ptr);
+        // 长度大于 限制的最大长度
         if (len > server.hash_max_ziplist_value) {
+            // 转成OBJ_ENCODING_HT对象
             hashTypeConvert(o, OBJ_ENCODING_HT);
             return;
         }
         sum += len;
     }
+
+    // 如果整个ziplist的字节数过大，也转成OBJ_ENCODING_HT
     if (!ziplistSafeToAdd(o->ptr, sum))
         hashTypeConvert(o, OBJ_ENCODING_HT);
 }
@@ -213,9 +219,11 @@ int hashTypeSet(robj *o, sds field, sds value, int flags) {
         zl = o->ptr;
         fptr = ziplistIndex(zl, ZIPLIST_HEAD);
         if (fptr != NULL) {
+            // 查找key
             fptr = ziplistFind(fptr, (unsigned char*)field, sdslen(field), 1);
             if (fptr != NULL) {
                 /* Grab pointer to the value (fptr points to the field) */
+                // 拿到value。field在前，value在后
                 vptr = ziplistNext(zl, fptr);
                 serverAssert(vptr != NULL);
                 update = 1;

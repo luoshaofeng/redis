@@ -75,27 +75,40 @@ void setGenericCommand(client *c, int flags, robj *key, robj *val, robj *expire,
     long long milliseconds = 0; /* initialized to avoid any harmness warning */
 
     if (expire) {
+        // 解析过期时间到milliseconds
         if (getLongLongFromObjectOrReply(c, expire, &milliseconds, NULL) != C_OK)
             return;
+        // 过期时间小于0，报错
         if (milliseconds <= 0) {
             addReplyErrorFormat(c,"invalid expire time in %s",c->cmd->name);
             return;
         }
+        // 如果是秒级，*1000（redis保存的数值是毫秒级的）
         if (unit == UNIT_SECONDS) milliseconds *= 1000;
     }
 
+    // 如果NX但是key存在 或者 XX但是key不存在，直接返回响应
     if ((flags & OBJ_SET_NX && lookupKeyWrite(c->db,key) != NULL) ||
         (flags & OBJ_SET_XX && lookupKeyWrite(c->db,key) == NULL))
     {
+        // 返回响应
         addReply(c, abort_reply ? abort_reply : shared.null[c->resp]);
         return;
     }
+
+    // 设置键值对，处理key对应的过期时间
     genericSetKey(c,c->db,key,val,flags & OBJ_SET_KEEPTTL,1);
+    // 写次数+1
     server.dirty++;
+    // 设置过期时间
     if (expire) setExpire(c,c->db,key,mstime()+milliseconds);
+    // 事件通知
     notifyKeyspaceEvent(NOTIFY_STRING,"set",key,c->db->id);
+    // 事件通知
     if (expire) notifyKeyspaceEvent(NOTIFY_GENERIC,
         "expire",key,c->db->id);
+
+    // 返回成功的响应
     addReply(c, ok_reply ? ok_reply : shared.ok);
 }
 
@@ -106,48 +119,52 @@ void setCommand(client *c) {
     int unit = UNIT_SECONDS;
     int flags = OBJ_SET_NO_FLAGS;
 
+    // 如果存在第4个参数，解析出来（解析命令，设置标识）
     for (j = 3; j < c->argc; j++) {
         char *a = c->argv[j]->ptr;
         robj *next = (j == c->argc-1) ? NULL : c->argv[j+1];
 
+        // 查看是不是有NX命令
         if ((a[0] == 'n' || a[0] == 'N') &&
             (a[1] == 'x' || a[1] == 'X') && a[2] == '\0' &&
-            !(flags & OBJ_SET_XX))
+            !(flags & OBJ_SET_XX))      // 同时不能有XX命令
         {
+            // 设置改命令有NX标识
             flags |= OBJ_SET_NX;
-        } else if ((a[0] == 'x' || a[0] == 'X') &&
+        } else if ((a[0] == 'x' || a[0] == 'X') &&      // 查看是不是有XX命令
                    (a[1] == 'x' || a[1] == 'X') && a[2] == '\0' &&
-                   !(flags & OBJ_SET_NX))
+                   !(flags & OBJ_SET_NX))               // 同时不能有NX命令
         {
-            flags |= OBJ_SET_XX;
-        } else if (!strcasecmp(c->argv[j]->ptr,"KEEPTTL") &&
-                   !(flags & OBJ_SET_EX) && !(flags & OBJ_SET_PX))
+            flags |= OBJ_SET_XX;            // 设置XX标识
+        } else if (!strcasecmp(c->argv[j]->ptr,"KEEPTTL") &&            // 查看是不是有KEEPTTL命令（保持原来键的过期时间）
+                   !(flags & OBJ_SET_EX) && !(flags & OBJ_SET_PX))      // 同时不能有NX和XX命令
         {
-            flags |= OBJ_SET_KEEPTTL;
-        } else if ((a[0] == 'e' || a[0] == 'E') &&
+            flags |= OBJ_SET_KEEPTTL;           // 表示KEEPTTL
+        } else if ((a[0] == 'e' || a[0] == 'E') &&          // 查看是不是有EX命令
                    (a[1] == 'x' || a[1] == 'X') && a[2] == '\0' &&
-                   !(flags & OBJ_SET_KEEPTTL) &&
+                   !(flags & OBJ_SET_KEEPTTL) &&            // 同时不能有KEEPTTL和PX命令
                    !(flags & OBJ_SET_PX) && next)
         {
-            flags |= OBJ_SET_EX;
-            unit = UNIT_SECONDS;
-            expire = next;
-            j++;
-        } else if ((a[0] == 'p' || a[0] == 'P') &&
+            flags |= OBJ_SET_EX;        // 标识EX
+            unit = UNIT_SECONDS;        // 时间为秒级
+            expire = next;              // 过期时间为下一个元素
+            j++;                        // 跳过下一个参数
+        } else if ((a[0] == 'p' || a[0] == 'P') &&          // 查看是不是有PX命令
                    (a[1] == 'x' || a[1] == 'X') && a[2] == '\0' &&
-                   !(flags & OBJ_SET_KEEPTTL) &&
+                   !(flags & OBJ_SET_KEEPTTL) &&        // 同时不能有KEEPTTL和EX命令
                    !(flags & OBJ_SET_EX) && next)
         {
-            flags |= OBJ_SET_PX;
-            unit = UNIT_MILLISECONDS;
-            expire = next;
-            j++;
+            flags |= OBJ_SET_PX;            // 标识PX
+            unit = UNIT_MILLISECONDS;       // 表示毫秒级的时间
+            expire = next;                  // 过期时间为下一个元素
+            j++;                            // 跳过下一个参数
         } else {
-            addReply(c,shared.syntaxerr);
+            addReply(c,shared.syntaxerr);       // 否则就直接报错
             return;
         }
     }
 
+    // 编码value的值，有三种编码：OBJ_ENCODING_RAW、OBJ_ENCODING_INT 和 OBJ_ENCODING_EMBSTR
     c->argv[2] = tryObjectEncoding(c->argv[2]);
     setGenericCommand(c,flags,c->argv[1],c->argv[2],expire,unit,NULL,NULL);
 }

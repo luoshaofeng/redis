@@ -257,7 +257,9 @@ robj *createZsetObject(void) {
     zset *zs = zmalloc(sizeof(*zs));
     robj *o;
 
+    // 创建字典对象
     zs->dict = dictCreate(&zsetDictType,NULL);
+    // 创建跳表对象
     zs->zsl = zslCreate();
     o = createObject(OBJ_ZSET,zs);
     o->encoding = OBJ_ENCODING_SKIPLIST;
@@ -443,6 +445,7 @@ void trimStringObjectIfNeeded(robj *o) {
 }
 
 /* Try to encode a string object in order to save space */
+// 编码字符串类型
 robj *tryObjectEncoding(robj *o) {
     long value;
     sds s = o->ptr;
@@ -467,28 +470,34 @@ robj *tryObjectEncoding(robj *o) {
     /* Check if we can represent this string as a long integer.
      * Note that we are sure that a string larger than 20 chars is not
      * representable as a 32 nor 64 bit integer. */
+    // 获取这个字符串的长度
     len = sdslen(s);
+    // 长度小于20 && 可以转成long类型
     if (len <= 20 && string2l(s,len,&value)) {
         /* This object is encodable as a long. Try to use a shared object.
          * Note that we avoid using shared integers when maxmemory is used
          * because every object needs to have a private LRU field for the LRU
          * algorithm to work well. */
+        // 数值的长度 在[0,10000]之间，复用这个对象，直接返回
         if ((server.maxmemory == 0 ||
             !(server.maxmemory_policy & MAXMEMORY_FLAG_NO_SHARED_INTEGERS)) &&
             value >= 0 &&
             value < OBJ_SHARED_INTEGERS)
         {
-            decrRefCount(o);
-            incrRefCount(shared.integers[value]);
-            return shared.integers[value];
+            decrRefCount(o);        // 原对象的引用-1，方便内存释放
+            incrRefCount(shared.integers[value]);       // 共享对象的引用+1
+            return shared.integers[value];      // 返回共享对象
         } else {
+            // 不能复用共享对象，将编码修改为 OBJ_ENCODING_INT
             if (o->encoding == OBJ_ENCODING_RAW) {
+                // 释放掉原有的对象内存
                 sdsfree(o->ptr);
                 o->encoding = OBJ_ENCODING_INT;
                 o->ptr = (void*) value;
                 return o;
-            } else if (o->encoding == OBJ_ENCODING_EMBSTR) {
+            } else if (o->encoding == OBJ_ENCODING_EMBSTR) {        // 如果是OBJ_ENCODING_EMBSTR这种编码
                 decrRefCount(o);
+                // 根据long long对象创建string对象
                 return createStringObjectFromLongLongForValue(value);
             }
         }
@@ -498,10 +507,12 @@ robj *tryObjectEncoding(robj *o) {
      * try the EMBSTR encoding which is more efficient.
      * In this representation the object and the SDS string are allocated
      * in the same chunk of memory to save space and cache misses. */
+    // 字符串不能 转成 数字类型，判断字符串的长度大小
     if (len <= OBJ_ENCODING_EMBSTR_SIZE_LIMIT) {
         robj *emb;
-
+        // 如果原来就是OBJ_ENCODING_EMBSTR编码，直接返回
         if (o->encoding == OBJ_ENCODING_EMBSTR) return o;
+        // 创建OBJ_ENCODING_EMBSTR编码对象
         emb = createEmbeddedStringObject(s,sdslen(s));
         decrRefCount(o);
         return emb;
@@ -516,6 +527,7 @@ robj *tryObjectEncoding(robj *o) {
      * We do that only for relatively large strings as this branch
      * is only entered if the length of the string is greater than
      * OBJ_ENCODING_EMBSTR_SIZE_LIMIT. */
+    // 移除两边的空格
     trimStringObjectIfNeeded(o);
 
     /* Return the original object. */

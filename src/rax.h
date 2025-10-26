@@ -96,9 +96,13 @@
 
 #define RAX_NODE_MAX_SIZE ((1<<29)-1)
 typedef struct raxNode {
+    // 是否是一个完整的key（终点）
     uint32_t iskey:1;     /* Does this node contain a key? */
+    // 是否没有关联的value
     uint32_t isnull:1;    /* Associated value is NULL (don't store it). */
+    // 是否是压缩节点（路径压缩）
     uint32_t iscompr:1;   /* Node is compressed. */
+    // 子节点的数量
     uint32_t size:29;     /* Number of children, or compressed string len. */
     /* Data layout is as follows:
      *
@@ -131,8 +135,11 @@ typedef struct raxNode {
 } raxNode;
 
 typedef struct rax {
+    // 头节点
     raxNode *head;
+    // key的数量
     uint64_t numele;
+    // 节点的数量
     uint64_t numnodes;
 } rax;
 

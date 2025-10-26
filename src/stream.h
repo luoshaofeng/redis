@@ -14,9 +14,13 @@ typedef struct streamID {
 } streamID;
 
 typedef struct stream {
+    // 压缩前缀树
     rax *rax;               /* The radix tree holding the stream. */
+    // 元素的总个数
     uint64_t length;        /* Number of elements inside this stream. */
+    // 最后一条消息的ID
     streamID last_id;       /* Zero if there are yet no items. */
+    // 消费者组字典：name -> streamCG 结构
     rax *cgroups;           /* Consumer groups dictionary: name -> streamCG */
 } stream;
 

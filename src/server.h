@@ -638,6 +638,7 @@ typedef struct RedisModuleDigest {
 #define OBJ_ENCODING_RAW 0     /* Raw representation */
 #define OBJ_ENCODING_INT 1     /* Encoded as integer */
 #define OBJ_ENCODING_HT 2      /* Encoded as hash table */
+// 废弃的结构
 #define OBJ_ENCODING_ZIPMAP 3  /* Encoded as zipmap */
 #define OBJ_ENCODING_LINKEDLIST 4 /* No longer used: old list encoding. */
 #define OBJ_ENCODING_ZIPLIST 5 /* Encoded as ziplist */
@@ -841,6 +842,7 @@ typedef struct {
 typedef struct client {
     uint64_t id; /* Client incremental unique ID. */
     connection *conn;
+    // 协议版本
     int resp; /* RESP protocol version. Can be 2 or 3. */
     redisDb *db; /* Pointer to currently SELECTed DB. */
     robj *name; /* As set by CLIENT SETNAME. */
@@ -966,24 +968,35 @@ struct sharedObjectsStruct {
 
 /* ZSETs use a specialized version of Skiplists */
 typedef struct zskiplistNode {
+    // 元素值
     sds ele;
+    // 得分
     double score;
+    // 前一个节点
     struct zskiplistNode *backward;
 
+    // 当前节点的多个层级
     struct zskiplistLevel {
+        // 当前层级的下一个节点
         struct zskiplistNode *forward;
+        // 跨度，两个节点之间的距离（相邻的两个节点跨度是1）
         unsigned long span;
     } level[];
 } zskiplistNode;
 
 typedef struct zskiplist {
+    // 首节点 和 尾节点
     struct zskiplistNode *header, *tail;
+    // 实际节点数
     unsigned long length;
-    int level; // 跳表最大层数
+    // 跳表最大层数
+    int level;
 } zskiplist;
 
 typedef struct zset {
+    // 字典对象
     dict *dict;
+    // 跳表
     zskiplist *zsl;
 } zset;
 
@@ -1194,7 +1207,8 @@ struct redisServer {
     // 当前执行的客户端命令
     client *current_client; /* Current client executing the command. */
     rax *clients_timeout_table; /* 阻塞客户端的树根 Radix tree for blocked clients timeouts. */
-    long fixed_time_expire; /* 大于0，根据server.mstime判断过期键 If > 0, expire keys against server.mstime. */
+    // 大于0，根据server.mstime判断过期键
+    long fixed_time_expire; /* If > 0, expire keys against server.mstime. */
     // 活跃的客户端链接
     rax *clients_index; /* Active clients dictionary by client ID. */
     int clients_paused; /* True if clients are currently paused */
@@ -1212,7 +1226,8 @@ struct redisServer {
     long long events_processed_while_blocked; /* processEventsWhileBlocked() */
 
     /* RDB / AOF loading information */
-    volatile sig_atomic_t loading; /* RDB或者AOF加载数据 We are loading data from disk if true */
+    // RDB或者AOF加载数据
+    volatile sig_atomic_t loading; /* We are loading data from disk if true */
     off_t loading_total_bytes;
     off_t loading_loaded_bytes;
     time_t loading_start_time;
@@ -1228,6 +1243,7 @@ struct redisServer {
     time_t stat_starttime; /* Server start time */
     long long stat_numcommands; /* 处理命令的个数 Number of processed commands */
     long long stat_numconnections; /* 添加连接接收数 Number of connections received */
+    // 删除掉的过期键统计
     long long stat_expiredkeys; /* Number of expired keys */
     double stat_expired_stale_perc; /* Percentage of keys probably expired */
     long long stat_expired_time_cap_reached_count; /* Early expire cylce stops.*/
@@ -1414,6 +1430,7 @@ struct redisServer {
     /* Replication (slave) */
     char *masteruser; /* AUTH with this user and masterauth with master */
     char *masterauth; /* AUTH with this password with master */
+    // master节点的host，从节点用
     char *masterhost; /* Hostname of master */
     int masterport; /* Port of master */
     int repl_timeout; /* Timeout after N seconds of master idle */
@@ -1453,6 +1470,7 @@ struct redisServer {
     // 最大并发客户端数
     unsigned int maxclients; /* Max number of simultaneous clients */
     unsigned long long maxmemory; /* Max number of memory bytes to use */
+    // 内存淘汰策略
     int maxmemory_policy; /* Policy for key eviction */
     int maxmemory_samples; /* Precision of random sampling */
     int lfu_log_factor; /* LFU logarithmic counter factor. */
@@ -1465,6 +1483,7 @@ struct redisServer {
     unsigned int blocked_clients; /* # of clients executing a blocking cmd.*/
     unsigned int blocked_clients_by_type[BLOCKED_NUM];
     list *unblocked_clients; /* list of clients to unblock before next loop */
+    // 准备好给阻塞的客户端获取的key
     list *ready_keys; /* List of readyList structures for BLPOP & co */
     /* Client side caching. */
     unsigned int tracking_clients; /* # of clients with tracking enabled.*/
@@ -1477,9 +1496,12 @@ struct redisServer {
     int sort_store;
     /* Zip structure config, see redis.conf for more information  */
     size_t hash_max_ziplist_entries;
+    // hash对象val的最大长度
     size_t hash_max_ziplist_value;
     size_t set_max_intset_entries;
+    // zset中最大的压缩列表entry数
     size_t zset_max_ziplist_entries;
+    // zset中ziplist value值的最大长度
     size_t zset_max_ziplist_value;
     size_t hll_sparse_max_bytes;
     size_t stream_node_max_bytes;
@@ -1544,6 +1566,7 @@ struct redisServer {
     int lua_oom; /* OOM detected when script start? */
     /* Lazy free */
     int lazyfree_lazy_eviction;
+    // 延迟释放key（异步删除过期key）
     int lazyfree_lazy_expire;
     int lazyfree_lazy_server_del;
     int lazyfree_lazy_user_del;
@@ -2343,7 +2366,8 @@ void addACLLogEntry(client *c, int reason, int keypos, sds username);
 /* Struct to hold an inclusive/exclusive range spec by score comparison. */
 typedef struct {
     double min, max;
-    int minex, maxex; /* 表示开区间？ are min or max exclusive? */
+    // 表示min 或者 max是不是开区间
+    int minex, maxex; /* are min or max exclusive? */
 } zrangespec;
 
 /* Struct to hold an inclusive/exclusive range spec by lexicographic comparison. */

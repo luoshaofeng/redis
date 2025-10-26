@@ -60,6 +60,7 @@ int setTypeAdd(robj *subject, sds value) {
             return 1;
         }
     } else if (subject->encoding == OBJ_ENCODING_INTSET) {
+        // 当添加的元素不是整数时，转为OBJ_ENCODING_HT对象
         if (isSdsRepresentableAsLongLong(value,&llval) == C_OK) {
             uint8_t success = 0;
             subject->ptr = intsetAdd(subject->ptr,llval,&success);
@@ -279,6 +280,7 @@ void saddCommand(client *c) {
         }
     }
 
+    // SADD key member [member ...]
     for (j = 2; j < c->argc; j++) {
         if (setTypeAdd(set,c->argv[j]->ptr)) added++;
     }

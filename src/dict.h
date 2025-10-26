@@ -49,38 +49,57 @@
 
 typedef struct dictEntry {
     void *key;
+
     union {
+        // 这里保存键值对中的值
         void *val;
         uint64_t u64;
+        // 这里保存过期时间的值
         int64_t s64;
         double d;
     } v;
+
+    // 链表，产生哈希冲突时用链表法
     struct dictEntry *next;
 } dictEntry;
 
 typedef struct dictType {
     uint64_t (*hashFunction)(const void *key);
+
     void *(*keyDup)(void *privdata, const void *key);
+
     void *(*valDup)(void *privdata, const void *obj);
+
     int (*keyCompare)(void *privdata, const void *key1, const void *key2);
+
     void (*keyDestructor)(void *privdata, void *key);
+
     void (*valDestructor)(void *privdata, void *obj);
 } dictType;
 
 /* This is our hash table structure. Every dictionary has two of this as we
  * implement incremental rehashing, for the old to the new table. */
 typedef struct dictht {
+    // 哈希元素数组
     dictEntry **table;
+    // 桶数量
     unsigned long size;
+    // 掩码
     unsigned long sizemask;
+    // 表中的元素个数
     unsigned long used;
 } dictht;
 
 typedef struct dict {
+    // 字典上的操作函数
     dictType *type;
+    // 私有数据
     void *privdata;
+    // 哈希表
     dictht ht[2];
+    // -1表示未迁移
     long rehashidx; /* rehashing not in progress if rehashidx == -1 */
+    // 表示当前是否正在迭代
     unsigned long iterators; /* number of iterators currently running */
 } dict;
 
@@ -89,15 +108,21 @@ typedef struct dict {
  * iterating. Otherwise it is a non safe iterator, and only dictNext()
  * should be called while iterating. */
 typedef struct dictIterator {
+    // 字典
     dict *d;
+    // 当前桶索引
     long index;
+    // 哈希表，是否安全
     int table, safe;
+    // 当前节点，下一个节点
     dictEntry *entry, *nextEntry;
     /* unsafe iterator fingerprint for misuse detection. */
+    // 仅 unsafe 模式下用于检测字典变化
     unsigned long long fingerprint;
 } dictIterator;
 
 typedef void (dictScanFunction)(void *privdata, const dictEntry *de);
+
 typedef void (dictScanBucketFunction)(void *privdata, dictEntry **bucketref);
 
 /* This is the initial size of every hash table */
@@ -159,42 +184,74 @@ typedef void (dictScanBucketFunction)(void *privdata, dictEntry **bucketref);
 
 typedef enum {
     DICT_RESIZE_ENABLE,
-    DICT_RESIZE_AVOID,
+    DICT_RESIZE_AVOID, // 避免重哈希。尽量不rehash，避免大量页被修改，降低copy on write开销。但是如果负载过大，强制重哈希
     DICT_RESIZE_FORBID,
 } dictResizeEnable;
 
 /* API */
 dict *dictCreate(dictType *type, void *privDataPtr);
+
 int dictExpand(dict *d, unsigned long size);
+
 int dictAdd(dict *d, void *key, void *val);
+
 dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing);
+
 dictEntry *dictAddOrFind(dict *d, void *key);
+
 int dictReplace(dict *d, void *key, void *val);
+
 int dictDelete(dict *d, const void *key);
+
 dictEntry *dictUnlink(dict *ht, const void *key);
+
 void dictFreeUnlinkedEntry(dict *d, dictEntry *he);
+
 void dictRelease(dict *d);
-dictEntry * dictFind(dict *d, const void *key);
+
+dictEntry *dictFind(dict *d, const void *key);
+
 void *dictFetchValue(dict *d, const void *key);
+
 int dictResize(dict *d);
+
 dictIterator *dictGetIterator(dict *d);
+
 dictIterator *dictGetSafeIterator(dict *d);
+
 dictEntry *dictNext(dictIterator *iter);
+
 void dictReleaseIterator(dictIterator *iter);
+
 dictEntry *dictGetRandomKey(dict *d);
+
 dictEntry *dictGetFairRandomKey(dict *d);
+
 unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count);
+
 void dictGetStats(char *buf, size_t bufsize, dict *d);
+
 uint64_t dictGenHashFunction(const void *key, int len);
+
 uint64_t dictGenCaseHashFunction(const unsigned char *buf, int len);
-void dictEmpty(dict *d, void(callback)(void*));
+
+void dictEmpty(dict *d, void (callback)(void *));
+
 void dictSetResizeEnabled(dictResizeEnable enable);
+
 int dictRehash(dict *d, int n);
+
 int dictRehashMilliseconds(dict *d, int ms);
+
 void dictSetHashFunctionSeed(uint8_t *seed);
+
 uint8_t *dictGetHashFunctionSeed(void);
-unsigned long dictScan(dict *d, unsigned long v, dictScanFunction *fn, dictScanBucketFunction *bucketfn, void *privdata);
+
+unsigned long dictScan(dict *d, unsigned long v, dictScanFunction *fn, dictScanBucketFunction *bucketfn,
+                       void *privdata);
+
 uint64_t dictGetHash(dict *d, const void *key);
+
 dictEntry **dictFindEntryRefByPtrAndHash(dict *d, const void *oldptr, uint64_t hash);
 
 /* Hash table types */
