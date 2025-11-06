@@ -240,9 +240,11 @@ uint64_t rdbLoadLen(rio *rdb, int *isencoded) {
  * for encoded types. If the function successfully encodes the integer, the
  * representation is stored in the buffer pointer to by "enc" and the string
  * length is returned. Otherwise 0 is returned. */
+// 整数的特殊编码
+// 编码value到enc
 int rdbEncodeInteger(long long value, unsigned char *enc) {
     if (value >= -(1<<7) && value <= (1<<7)-1) {
-        enc[0] = (RDB_ENCVAL<<6)|RDB_ENC_INT8;
+        enc[0] = (RDB_ENCVAL<<6)|RDB_ENC_INT8;      // 高二位表示是一个特殊的编码，低6位表示是int8，int16还是int32
         enc[1] = value&0xFF;
         return 2;
     } else if (value >= -(1<<15) && value <= (1<<15)-1) {
@@ -310,17 +312,22 @@ void *rdbLoadIntegerObject(rio *rdb, int enctype, int flags, size_t *lenptr) {
 /* String objects in the form "2391" "-100" without any space and with a
  * range of values that can fit in an 8, 16 or 32 bit signed value can be
  * encoded as integers to save space */
+// 尝试整数编码，返回值大于0，表示占用的字节数。返回0表示无法编码
 int rdbTryIntegerEncoding(char *s, size_t len, unsigned char *enc) {
     long long value;
     char *endptr, buf[32];
 
     /* Check if it's possible to encode this value as a number */
+    // 前面的转成数字返回val，剩余的非数字放到endptr
     value = strtoll(s, &endptr, 10);
+    // 完整解析s是一个整数，不行的话返回0
     if (endptr[0] != '\0') return 0;
+    // 逆向转回去也是一样  "0123" -> 123 -> "123"，这种就不行
     ll2string(buf,32,value);
 
     /* If the number converted back into a string is not identical
      * then it's not possible to encode the string as integer */
+    // 逆向转回去不一致，不编码
     if (strlen(buf) != len || memcmp(buf,s,len)) return 0;
 
     return rdbEncodeInteger(value,enc);
@@ -414,6 +421,7 @@ err:
 
 /* Save a string object as [len][data] on disk. If the object is a string
  * representation of an integer value we try to save it in a special form */
+// 将s写入rdb中，返回保存的字节数
 ssize_t rdbSaveRawString(rio *rdb, unsigned char *s, size_t len) {
     int enclen;
     ssize_t n, nwritten = 0;
@@ -421,7 +429,9 @@ ssize_t rdbSaveRawString(rio *rdb, unsigned char *s, size_t len) {
     /* Try integer encoding */
     if (len <= 11) {
         unsigned char buf[5];
+        // 尝试编码成整数，将编码保存到buf
         if ((enclen = rdbTryIntegerEncoding((char*)s,len,buf)) > 0) {
+            // 写入到文件中
             if (rdbWriteRaw(rdb,buf,enclen) == -1) return -1;
             return enclen;
         }
@@ -429,7 +439,9 @@ ssize_t rdbSaveRawString(rio *rdb, unsigned char *s, size_t len) {
 
     /* Try LZF compression - under 20 bytes it's unable to compress even
      * aaaaaaaaaaaaaaaaaa so skip it */
+    // 如果开启了
     if (server.rdb_compression && len > 20) {
+        // 压缩写入文件
         n = rdbSaveLzfStringObject(rdb,s,len);
         if (n == -1) return -1;
         if (n > 0) return n;
@@ -1060,12 +1072,14 @@ int rdbSaveKeyValuePair(rio *rdb, robj *key, robj *val, long long expiretime) {
     int savelfu = server.maxmemory_policy & MAXMEMORY_FLAG_LFU;
 
     /* Save the expire time */
+    // 保存过期时间
     if (expiretime != -1) {
         if (rdbSaveType(rdb,RDB_OPCODE_EXPIRETIME_MS) == -1) return -1;
         if (rdbSaveMillisecondTime(rdb,expiretime) == -1) return -1;
     }
 
     /* Save the LRU info. */
+    // 保存lru信息
     if (savelru) {
         uint64_t idletime = estimateObjectIdleTime(val);
         idletime /= 1000; /* Using seconds is enough and requires less space.*/
@@ -1074,6 +1088,7 @@ int rdbSaveKeyValuePair(rio *rdb, robj *key, robj *val, long long expiretime) {
     }
 
     /* Save the LFU info. */
+    // 保存lfu信息
     if (savelfu) {
         uint8_t buf[1];
         buf[0] = LFUDecrAndReturn(val);
@@ -1086,6 +1101,7 @@ int rdbSaveKeyValuePair(rio *rdb, robj *key, robj *val, long long expiretime) {
     }
 
     /* Save type, key, value */
+    // 保存key和val
     if (rdbSaveObjectType(rdb,val) == -1) return -1;
     if (rdbSaveStringObject(rdb,key) == -1) return -1;
     if (rdbSaveObject(rdb,val,key) == -1) return -1;
@@ -1098,6 +1114,7 @@ int rdbSaveKeyValuePair(rio *rdb, robj *key, robj *val, long long expiretime) {
 }
 
 /* Save an AUX field. */
+// 将key和val写入到rdb中
 ssize_t rdbSaveAuxField(rio *rdb, void *key, size_t keylen, void *val, size_t vallen) {
     ssize_t ret, len = 0;
     if ((ret = rdbSaveType(rdb,RDB_OPCODE_AUX)) == -1) return -1;
@@ -1128,6 +1145,7 @@ int rdbSaveInfoAuxFields(rio *rdb, int rdbflags, rdbSaveInfo *rsi) {
     int aof_preamble = (rdbflags & RDBFLAGS_AOF_PREAMBLE) != 0;
 
     /* Add a few fields about the state when the RDB was created. */
+    // 将这些信息全部编码写入到rdb中
     if (rdbSaveAuxFieldStrStr(rdb,"redis-ver",REDIS_VERSION) == -1) return -1;
     if (rdbSaveAuxFieldStrInt(rdb,"redis-bits",redis_bits) == -1) return -1;
     if (rdbSaveAuxFieldStrInt(rdb,"ctime",time(NULL)) == -1) return -1;
@@ -1205,25 +1223,38 @@ int rdbSaveRio(rio *rdb, int *error, int rdbflags, rdbSaveInfo *rsi) {
 
     if (server.rdb_checksum)
         rdb->update_cksum = rioGenericUpdateChecksum;
+    // 魔数
     snprintf(magic,sizeof(magic),"REDIS%04d",RDB_VERSION);
+    // 写入魔数
     if (rdbWriteRaw(rdb,magic,9) == -1) goto werr;
+    // 写文件头到rdb
     if (rdbSaveInfoAuxFields(rdb,rdbflags,rsi) == -1) goto werr;
+    // 将module信息也写入rdb
     if (rdbSaveModulesAux(rdb, REDISMODULE_AUX_BEFORE_RDB) == -1) goto werr;
 
+    // 遍历数据库
     for (j = 0; j < server.dbnum; j++) {
+        // 选中的数据库
         redisDb *db = server.db+j;
+        // 数据库字典
         dict *d = db->dict;
         if (dictSize(d) == 0) continue;
+        // 安全迭代
         di = dictGetSafeIterator(d);
 
         /* Write the SELECT DB opcode */
+        // 标识这是数据库
         if (rdbSaveType(rdb,RDB_OPCODE_SELECTDB) == -1) goto werr;
+        // 标识这是第几个数据库
         if (rdbSaveLen(rdb,j) == -1) goto werr;
 
         /* Write the RESIZE DB opcode. */
         uint64_t db_size, expires_size;
+        // 返回元素个数
         db_size = dictSize(db->dict);
+        // 过期键的元素个数
         expires_size = dictSize(db->expires);
+        // 保存字典的元素个数
         if (rdbSaveType(rdb,RDB_OPCODE_RESIZEDB) == -1) goto werr;
         if (rdbSaveLen(rdb,db_size) == -1) goto werr;
         if (rdbSaveLen(rdb,expires_size) == -1) goto werr;
@@ -1236,15 +1267,19 @@ int rdbSaveRio(rio *rdb, int *error, int rdbflags, rdbSaveInfo *rsi) {
 
             initStaticStringObject(key,keystr);
             expire = getExpire(db,&key);
+            // 保存key，val对的信息
             if (rdbSaveKeyValuePair(rdb,&key,o,expire) == -1) goto werr;
 
             /* When this RDB is produced as part of an AOF rewrite, move
              * accumulated diff from parent to child while rewriting in
              * order to have a smaller final write. */
+            // aof和rdb混合模式，写入的数据超过一定量（10mb）
             if (rdbflags & RDBFLAGS_AOF_PREAMBLE &&
                 rdb->processed_bytes > processed+AOF_READ_DIFF_INTERVAL_BYTES)
             {
+                // 更新，下一个比较也是10mb
                 processed = rdb->processed_bytes;
+                // 将父进程的增量命令放到子进程的缓冲区中
                 aofReadDiffFromParent();
             }
         }
@@ -1256,6 +1291,7 @@ int rdbSaveRio(rio *rdb, int *error, int rdbflags, rdbSaveInfo *rsi) {
      * the script cache as well: on successful PSYNC after a restart, we need
      * to be able to process any EVALSHA inside the replication backlog the
      * master will send us. */
+    // 写入lua脚本数据
     if (rsi && dictSize(server.lua_scripts)) {
         di = dictGetIterator(server.lua_scripts);
         while((de = dictNext(di)) != NULL) {
@@ -1267,15 +1303,18 @@ int rdbSaveRio(rio *rdb, int *error, int rdbflags, rdbSaveInfo *rsi) {
         di = NULL; /* So that we don't release it again on error. */
     }
 
+    // module尾
     if (rdbSaveModulesAux(rdb, REDISMODULE_AUX_AFTER_RDB) == -1) goto werr;
 
     /* EOF opcode */
+    // 文件尾
     if (rdbSaveType(rdb,RDB_OPCODE_EOF) == -1) goto werr;
 
     /* CRC64 checksum. It will be zero if checksum computation is disabled, the
      * loading code skips the check in this case. */
     cksum = rdb->cksum;
     memrev64ifbe(&cksum);
+    // 将cksum写入到文件中
     if (rioWrite(rdb,&cksum,8) == 0) goto werr;
     return C_OK;
 
@@ -1315,6 +1354,7 @@ werr: /* Write error. */
 }
 
 /* Save the DB on disk. Return C_ERR on error, C_OK on success. */
+// 保存rdb文件到磁盘中
 int rdbSave(char *filename, rdbSaveInfo *rsi) {
     char tmpfile[256];
     char cwd[MAXPATHLEN]; /* Current working dir path for error messages. */
@@ -1386,6 +1426,7 @@ werr:
 int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
     pid_t childpid;
 
+    // 有子进程就不执行
     if (hasActiveChildProcess()) return C_ERR;
 
     server.dirty_before_bgsave = server.dirty;
@@ -1398,6 +1439,7 @@ int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
         /* Child */
         redisSetProcTitle("redis-rdb-bgsave");
         redisSetCpuAffinity(server.bgsave_cpulist);
+        // 保存rdb文件
         retval = rdbSave(filename,rsi);
         if (retval == C_OK) {
             sendChildCOWInfo(CHILD_TYPE_RDB, "RDB");
@@ -1416,6 +1458,7 @@ int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
         server.rdb_save_time_start = time(NULL);
         server.rdb_child_pid = childpid;
         server.rdb_child_type = RDB_CHILD_TYPE_DISK;
+        // 更新重哈希策略（设置为禁止重哈希）
         updateDictResizePolicy();
         return C_OK;
     }
@@ -2035,6 +2078,7 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, sds key) {
 
 /* Mark that we are loading in the global state and setup the fields
  * needed to provide loading stats. */
+// module事件相关
 void startLoading(size_t size, int rdbflags) {
     /* Load the DB */
     server.loading = 1;
@@ -2061,6 +2105,7 @@ void startLoadingFile(FILE *fp, char* filename, int rdbflags) {
     if (fstat(fileno(fp), &sb) == -1)
         sb.st_size = 0;
     rdbFileBeingLoaded = filename;
+    // 开始加载(module事件相关) st_size：文件大小
     startLoading(sb.st_size, rdbflags);
 }
 
@@ -2093,6 +2138,7 @@ void startSaving(int rdbflags) {
         subevent = REDISMODULE_SUBEVENT_PERSISTENCE_RDB_START;
     else
         subevent = REDISMODULE_SUBEVENT_PERSISTENCE_SYNC_RDB_START;
+    // module相关，不管
     moduleFireServerEvent(REDISMODULE_EVENT_PERSISTENCE,subevent,NULL);
 }
 
@@ -2136,6 +2182,7 @@ int rdbLoadRio(rio *rdb, int rdbflags, rdbSaveInfo *rsi) {
     rdb->update_cksum = rdbLoadProgressCallback;
     rdb->max_processing_chunk = server.loading_process_events_interval_bytes;
     if (rioRead(rdb,buf,9) == 0) goto eoferr;
+    // 校验文件头
     buf[9] = '\0';
     if (memcmp(buf,"REDIS",5) != 0) {
         serverLog(LL_WARNING,"Wrong signature trying to load DB from file");
@@ -2153,15 +2200,17 @@ int rdbLoadRio(rio *rdb, int rdbflags, rdbSaveInfo *rsi) {
     long long lru_idle = -1, lfu_freq = -1, expiretime = -1, now = mstime();
     long long lru_clock = LRU_CLOCK();
 
+    // 加载具体的内容
     while(1) {
         sds key;
         robj *val;
 
         /* Read type. */
+        // type占一个字节，先解析type
         if ((type = rdbLoadType(rdb)) == -1) goto eoferr;
 
         /* Handle special types. */
-        if (type == RDB_OPCODE_EXPIRETIME) {
+        if (type == RDB_OPCODE_EXPIRETIME) {        // 解析过期时间
             /* EXPIRETIME: load an expire associated with the next key
              * to load. Note that after loading an expire we need to
              * load the actual type, and continue. */
@@ -2169,13 +2218,13 @@ int rdbLoadRio(rio *rdb, int rdbflags, rdbSaveInfo *rsi) {
             expiretime *= 1000;
             if (rioGetReadError(rdb)) goto eoferr;
             continue; /* Read next opcode. */
-        } else if (type == RDB_OPCODE_EXPIRETIME_MS) {
+        } else if (type == RDB_OPCODE_EXPIRETIME_MS) {      // 解析过期时间
             /* EXPIRETIME_MS: milliseconds precision expire times introduced
              * with RDB v3. Like EXPIRETIME but no with more precision. */
             expiretime = rdbLoadMillisecondTime(rdb,rdbver);
             if (rioGetReadError(rdb)) goto eoferr;
             continue; /* Read next opcode. */
-        } else if (type == RDB_OPCODE_FREQ) {
+        } else if (type == RDB_OPCODE_FREQ) {           // 解析lfu
             /* FREQ: LFU frequency. */
             uint8_t byte;
             if (rioRead(rdb,&byte,1) == 0) goto eoferr;
@@ -2213,7 +2262,7 @@ int rdbLoadRio(rio *rdb, int rdbflags, rdbSaveInfo *rsi) {
             dictExpand(db->dict,db_size);
             dictExpand(db->expires,expires_size);
             continue; /* Read next opcode. */
-        } else if (type == RDB_OPCODE_AUX) {
+        } else if (type == RDB_OPCODE_AUX) {        // 解析redis的额外信息
             /* AUX: generic string-string fields. Use to add state to RDB
              * which is backward compatible. Implementations of RDB loading
              * are required to skip AUX fields they don't understand.
@@ -2328,10 +2377,12 @@ int rdbLoadRio(rio *rdb, int rdbflags, rdbSaveInfo *rsi) {
             }
         }
 
+        // 加载key
         /* Read key */
         if ((key = rdbGenericLoadStringObject(rdb,RDB_LOAD_SDS,NULL)) == NULL)
             goto eoferr;
         /* Read value */
+        // 加载val
         if ((val = rdbLoadObject(type,rdb,key)) == NULL) {
             sdsfree(key);
             goto eoferr;
@@ -2345,6 +2396,7 @@ int rdbLoadRio(rio *rdb, int rdbflags, rdbSaveInfo *rsi) {
          * Similarly if the RDB is the preamble of an AOF file, we want to
          * load all the keys as they are, since the log of operations later
          * assume to work in an exact keyspace state. */
+        // master节点 && 不是aof&rdb混合模式 && 过期了
         if (iAmMaster() &&
             !(rdbflags&RDBFLAGS_AOF_PREAMBLE) &&
             expiretime != -1 && expiretime < now)
@@ -2352,10 +2404,12 @@ int rdbLoadRio(rio *rdb, int rdbflags, rdbSaveInfo *rsi) {
             sdsfree(key);
             decrRefCount(val);
         } else {
+            // 初始化keyobj
             robj keyobj;
             initStaticStringObject(keyobj,key);
 
             /* Add the new object in the hash table */
+            // 添加键值对
             int added = dbAddRDBLoad(db,key,val);
             if (!added) {
                 if (rdbflags & RDBFLAGS_ALLOW_DUP) {
@@ -2372,11 +2426,13 @@ int rdbLoadRio(rio *rdb, int rdbflags, rdbSaveInfo *rsi) {
             }
 
             /* Set the expire time if needed */
+            // 有过期时间的话设置过期时间
             if (expiretime != -1) {
                 setExpire(NULL,db,&keyobj,expiretime);
             }
 
             /* Set usage information (for eviction). */
+            // 设置lfu或者lru
             objectSetLRUOrLFU(val,lfu_freq,lru_idle,lru_clock,1000);
 
             /* call key space notification on key loaded for modules only */
@@ -2385,15 +2441,18 @@ int rdbLoadRio(rio *rdb, int rdbflags, rdbSaveInfo *rsi) {
 
         /* Loading the database more slowly is useful in order to test
          * certain edge cases. */
+        // 测试和调试用
         if (server.key_load_delay) usleep(server.key_load_delay);
 
         /* Reset the state that is key-specified and is populated by
          * opcodes before the key, so that we start from scratch again. */
+        // 重置信息
         expiretime = -1;
         lfu_freq = -1;
         lru_idle = -1;
     }
     /* Verify the checksum if RDB version is >= 5 */
+    // 读取checksum值
     if (rdbver >= 5) {
         uint64_t cksum, expected = rdb->cksum;
 
@@ -2402,7 +2461,7 @@ int rdbLoadRio(rio *rdb, int rdbflags, rdbSaveInfo *rsi) {
             memrev64ifbe(&cksum);
             if (cksum == 0) {
                 serverLog(LL_WARNING,"RDB file was saved with checksum disabled: no check performed.");
-            } else if (cksum != expected) {
+            } else if (cksum != expected) {     // 对比checksum
                 serverLog(LL_WARNING,"Wrong RDB checksum expected: (%llx) but "
                     "got (%llx). Aborting now.",
                         (unsigned long long)expected,
@@ -2411,6 +2470,8 @@ int rdbLoadRio(rio *rdb, int rdbflags, rdbSaveInfo *rsi) {
             }
         }
     }
+
+    // 整个rdb加载完
     return C_OK;
 
     /* Unexpected end of file is handled here calling rdbReportReadError():

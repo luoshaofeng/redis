@@ -117,7 +117,8 @@ typedef struct aeEventLoop {
     aeFileEvent *events; /* Registered events */
     // 从epoll读取出来的事件会保存到这里
     aeFiredEvent *fired; /* Fired events */
-    aeTimeEvent *timeEventHead; //aeCreateTimeEvent第一个创建
+    // serverCron 保存在这里
+    aeTimeEvent *timeEventHead;
     int stop;
     // 监听文件描述符的读写状态 aeApiState
     // epoll的根在这里

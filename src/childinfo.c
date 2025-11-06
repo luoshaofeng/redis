@@ -34,14 +34,15 @@
  * RDB / AOF saving process from the child to the parent (for instance
  * the amount of copy on write memory used) */
 void openChildInfoPipe(void) {
+    // 创建管道
     if (pipe(server.child_info_pipe) == -1) {
         /* On error our two file descriptors should be still set to -1,
          * but we call anyway cloesChildInfoPipe() since can't hurt. */
         closeChildInfoPipe();
-    } else if (anetNonBlock(NULL,server.child_info_pipe[0]) != ANET_OK) {
+    } else if (anetNonBlock(NULL,server.child_info_pipe[0]) != ANET_OK) {       // 设置读管道非阻塞
         closeChildInfoPipe();
     } else {
-        memset(&server.child_info_data,0,sizeof(server.child_info_data));
+        memset(&server.child_info_data,0,sizeof(server.child_info_data));   // 分配内存空间
     }
 }
 
@@ -64,6 +65,7 @@ void sendChildInfo(int ptype) {
     server.child_info_data.magic = CHILD_INFO_MAGIC;
     server.child_info_data.process_type = ptype;
     ssize_t wlen = sizeof(server.child_info_data);
+    // 上报子进程的信息
     if (write(server.child_info_pipe[1],&server.child_info_data,wlen) != wlen) {
         /* Nothing to do on error, this will be detected by the other side. */
     }

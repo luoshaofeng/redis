@@ -53,12 +53,14 @@ struct _rio {
      * designed so that can be called with the current checksum, and the buf
      * and len fields pointing to the new block of data to add to the checksum
      * computation. */
+    // 加载时设置回调函数 rdbLoadProgressCallback
     void (*update_cksum)(struct _rio *, const void *buf, size_t len);
 
     /* The current checksum and flags (see RIO_FLAG_*) */
     uint64_t cksum, flags;
 
     /* number of bytes read or written */
+    // 读 或者 写了多少字节
     size_t processed_bytes;
 
     /* maximum single read or write chunk size */

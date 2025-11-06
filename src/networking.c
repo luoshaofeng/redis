@@ -3349,6 +3349,7 @@ int stopThreadedIOIfNeeded(void) {
     /* Return ASAP if IO threads are disabled (single threaded mode). */
     if (server.io_threads_num == 1) return 1;
 
+    // 停掉io线程
     if (pending < (server.io_threads_num * 2)) {
         if (server.io_threads_active) stopThreadedIO();
         return 1;

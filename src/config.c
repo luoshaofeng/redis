@@ -140,6 +140,7 @@ int configOOMScoreAdjValuesDefaults[CONFIG_OOM_COUNT] = { 0, 200, 800 };
 typedef struct boolConfigData {
     int *config; /* The pointer to the server config this value is stored in */
     const int default_value; /* The default value of the config on rewrite */
+    // 校验值是否合法
     int (*is_valid_fn)(int val, char **err); /* Optional function to check validity of new value (generic doc above) */
     int (*update_fn)(int val, int prev, char **err); /* Optional function to apply new value at runtime (generic doc above) */
 } boolConfigData;
@@ -265,6 +266,7 @@ const char *evictPolicyToString(void) {
  * Config file parsing
  *----------------------------------------------------------------------------*/
 
+// yes转为1，no转为0
 int yesnotoi(char *s) {
     if (!strcasecmp(s,"yes")) return 1;
     else if (!strcasecmp(s,"no")) return 0;
@@ -361,6 +363,7 @@ void initConfigValues() {
     }
 }
 
+// 解析加载配置
 void loadServerConfigFromString(char *config) {
     char *err = NULL;
     char buf[1024];
@@ -396,6 +399,7 @@ void loadServerConfigFromString(char *config) {
 
         /* Iterate the configs that are standard */
         int match = 0;
+        // 去读全局配置表
         for (standardConfig *config = configs; config->name != NULL; config++) {
             if ((!strcasecmp(argv[0],config->name) ||
                 (config->alias && !strcasecmp(argv[0],config->alias))))
@@ -404,6 +408,7 @@ void loadServerConfigFromString(char *config) {
                     err = "wrong number of arguments";
                     goto loaderr;
                 }
+                // 匹配得上直接执行set操作，update为0，只更新配置，不启动aof子进程
                 if (!config->interface.set(config->data, argv[1], 0, &err)) {
                     goto loaderr;
                 }
@@ -419,6 +424,7 @@ void loadServerConfigFromString(char *config) {
         }
 
         /* Execute config directives */
+        // 有bind 配置（忽略大小写比较）
         if (!strcasecmp(argv[0],"bind") && argc >= 2) {
             int j, addresses = argc-1;
 
@@ -429,22 +435,25 @@ void loadServerConfigFromString(char *config) {
             for (j = 0; j < server.bindaddr_count; j++) {
                 zfree(server.bindaddr[j]);
             }
+            // 保存绑定地址
             for (j = 0; j < addresses; j++)
                 server.bindaddr[j] = zstrdup(argv[j+1]);
+            // 保存绑定地址个数
             server.bindaddr_count = addresses;
-        } else if (!strcasecmp(argv[0],"unixsocketperm") && argc == 2) {
+        } else if (!strcasecmp(argv[0],"unixsocketperm") && argc == 2) {        // 使用Unix套接字通信
             errno = 0;
             server.unixsocketperm = (mode_t)strtol(argv[1], NULL, 8);
             if (errno || server.unixsocketperm > 0777) {
                 err = "Invalid socket file permissions"; goto loaderr;
             }
-        } else if (!strcasecmp(argv[0],"save")) {
+        } else if (!strcasecmp(argv[0],"save")) {       // 有save配置，rdb
             if (argc == 3) {
-                int seconds = atoi(argv[1]);
-                int changes = atoi(argv[2]);
+                int seconds = atoi(argv[1]);        // 秒数
+                int changes = atoi(argv[2]);        // 次数
                 if (seconds < 1 || changes < 0) {
                     err = "Invalid save parameters"; goto loaderr;
                 }
+                // 将rdb配置添加到server.saveparams配置
                 appendServerSaveParams(seconds,changes);
             } else if (argc == 2 && !strcasecmp(argv[1],"")) {
                 resetServerSaveParams();
@@ -639,6 +648,7 @@ void loadServerConfig(char *filename, char *options) {
         if (filename[0] == '-' && filename[1] == '\0') {
             fp = stdin;
         } else {
+            // 打开配置文件
             if ((fp = fopen(filename,"r")) == NULL) {
                 serverLog(LL_WARNING,
                     "Fatal error, can't open config file '%s': %s",
@@ -646,11 +656,13 @@ void loadServerConfig(char *filename, char *options) {
                 exit(1);
             }
         }
+        // 将配置文件全部读取出来
         while(fgets(buf,CONFIG_MAX_LINE+1,fp) != NULL)
             config = sdscat(config,buf);
         if (fp != stdin) fclose(fp);
     }
     /* Append the additional options */
+    // 可选项加到配置config中
     if (options) {
         config = sdscat(config,"\n");
         config = sdscat(config,options);
@@ -1737,6 +1749,7 @@ static void boolConfigInit(typeData data) {
     *data.yesno.config = data.yesno.default_value;
 }
 
+    // 成功返回1，失败返回0
 static int boolConfigSet(typeData data, sds value, int update, char **err) {
     int yn = yesnotoi(value);
     if (yn == -1) {
@@ -1745,8 +1758,11 @@ static int boolConfigSet(typeData data, sds value, int update, char **err) {
     }
     if (data.yesno.is_valid_fn && !data.yesno.is_valid_fn(yn, err))
         return 0;
+    // 当前配置
     int prev = *(data.yesno.config);
+    // 设置新配置
     *(data.yesno.config) = yn;
+    // 更新失败则回滚配置
     if (update && data.yesno.update_fn && !data.yesno.update_fn(yn, prev, err)) {
         *(data.yesno.config) = prev;
         return 0;
@@ -2183,12 +2199,13 @@ static int updateGoodSlaves(long long val, long long prev, char **err) {
     return 1;
 }
 
+    // val-新值，prev-旧值，err-错误信息
 static int updateAppendonly(int val, int prev, char **err) {
     UNUSED(prev);
     if (val == 0 && server.aof_state != AOF_OFF) {
         stopAppendOnly();
-    } else if (val && server.aof_state == AOF_OFF) {
-        if (startAppendOnly() == C_ERR) {
+    } else if (val && server.aof_state == AOF_OFF) {        // 启动aof，原先的状态是 AOF_OFF
+        if (startAppendOnly() == C_ERR) {       // 启动aof
             *err = "Unable to turn on AOF. Check server logs.";
             return 0;
         }

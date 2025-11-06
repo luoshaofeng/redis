@@ -1869,12 +1869,13 @@ int incrementallyRehash(int dbid) {
  * for dict.c to resize or rehash the tables accordingly to the fact we have an
  * active fork child running. */
 void updateDictResizePolicy(void) {
+    // 禁止冲哈希
     if (server.in_fork_child != CHILD_TYPE_NONE)
         dictSetResizeEnabled(DICT_RESIZE_FORBID);
-    else if (hasActiveChildProcess())
+    else if (hasActiveChildProcess())       // 有子进程，尽量避免重哈希
         dictSetResizeEnabled(DICT_RESIZE_AVOID);
     else
-        dictSetResizeEnabled(DICT_RESIZE_ENABLE);
+        dictSetResizeEnabled(DICT_RESIZE_ENABLE);       // 允许重哈希
 }
 
 /* Return true if there are no active children processes doing RDB saving,
@@ -2181,20 +2182,24 @@ void checkChildrenDone(void) {
     int statloc;
     pid_t pid;
 
+    // 检查是否有子进程退出，获取子进程ID
     if ((pid = wait3(&statloc,WNOHANG,NULL)) != 0) {
+        // 获取退出码
         int exitcode = WEXITSTATUS(statloc);
         int bysignal = 0;
 
-        if (WIFSIGNALED(statloc)) bysignal = WTERMSIG(statloc);
+        // 子进程是否是被杀死的
+        if (WIFSIGNALED(statloc)) bysignal = WTERMSIG(statloc);     // 取出杀死它的信号编码
 
         /* sigKillChildHandler catches the signal and calls exit(), but we
          * must make sure not to flag lastbgsave_status, etc incorrectly.
          * We could directly terminate the child process via SIGUSR1
          * without handling it, but in this case Valgrind will log an
          * annoying error. */
+        // 主进程杀死的
         if (exitcode == SERVER_CHILD_NOERROR_RETVAL) {
-            bysignal = SIGUSR1;
-            exitcode = 1;
+            bysignal = SIGUSR1;     // 标记成"被我自己杀的"
+            exitcode = 1;           // 伪装成普通的失败退出（防止误报成功）
         }
 
         if (pid == -1) {
@@ -2207,7 +2212,7 @@ void checkChildrenDone(void) {
         } else if (pid == server.rdb_child_pid) {
             backgroundSaveDoneHandler(exitcode, bysignal);
             if (!bysignal && exitcode == 0) receiveChildInfo();
-        } else if (pid == server.aof_child_pid) {
+        } else if (pid == server.aof_child_pid) {       // 处理aof子进程退出
             backgroundRewriteDoneHandler(exitcode, bysignal);
             if (!bysignal && exitcode == 0) receiveChildInfo();
         } else if (pid == server.module_child_pid) {
@@ -2252,11 +2257,13 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
 
     /* Software watchdog: deliver the SIGALRM that will reach the signal
      * handler if we don't return here fast enough. */
+    // redis看门狗，暂时不管
     if (server.watchdog_period) watchdogScheduleSignal(server.watchdog_period);
 
     /* Update the time cache. */
     updateCachedTime(1);
 
+    // 更新执行频率
     server.hz = server.config_hz;
     /* Adapt the server.hz value to the number of configured clients. If we have
      * many clients, we want to call serverCron() with an higher frequency. */
@@ -2272,9 +2279,12 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     }
 
     run_with_period(100) {
+        // 当前一段时间内执行的命令数
         trackInstantaneousMetric(STATS_METRIC_COMMAND, server.stat_numcommands);
+        // 网络输入字节数
         trackInstantaneousMetric(STATS_METRIC_NET_INPUT,
                                  server.stat_net_input_bytes);
+        // 网络输出字节数
         trackInstantaneousMetric(STATS_METRIC_NET_OUTPUT,
                                  server.stat_net_output_bytes);
     }
@@ -2293,6 +2303,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     server.lruclock = getLRUClock();
 
     /* Record the max memory used since the server was started. */
+    // 更新内存峰值
     if (zmalloc_used_memory() > server.stat_peak_memory)
         server.stat_peak_memory = zmalloc_used_memory();
 
@@ -2368,12 +2379,14 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
 
     /* Start a scheduled AOF rewrite if this was requested by the user while
      * a BGSAVE was in progress. */
+    // 有待执行的aof重写
     if (!hasActiveChildProcess() &&
         server.aof_rewrite_scheduled) {
         rewriteAppendOnlyFileBackground();
     }
 
     /* Check if a background saving or AOF rewrite in progress terminated. */
+    // 检查子进程是否已完成
     if (hasActiveChildProcess() || ldbPendingChildren()) {
         checkChildrenDone();
     } else {
@@ -2403,10 +2416,13 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
         /* Trigger an AOF rewrite if needed. */
         if (server.aof_state == AOF_ON &&
             !hasActiveChildProcess() &&
-            server.aof_rewrite_perc &&
-            server.aof_current_size > server.aof_rewrite_min_size) {
+            server.aof_rewrite_perc &&      // 百分比阈值
+            server.aof_current_size > server.aof_rewrite_min_size) {        // 当前文件大小大于阈值
+            // 获取上一次完成aof文件重写时的大小
             long long base = server.aof_rewrite_base_size ? server.aof_rewrite_base_size : 1;
+            // 计算这次文件与上次文件增长的百分比
             long long growth = (server.aof_current_size * 100 / base) - 100;
+            // 大于等于百分比，触发重写
             if (growth >= server.aof_rewrite_perc) {
                 serverLog(LL_NOTICE, "Starting automatic rewriting of AOF on %lld%% growth", growth);
                 rewriteAppendOnlyFileBackground();
@@ -2452,6 +2468,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     }
 
     /* Stop the I/O threads if we don't have enough pending work. */
+    // 停掉io线程（如果需要的话）
     stopThreadedIOIfNeeded();
 
     /* Resize tracking keys table if needed. This is also done at every
@@ -2588,6 +2605,7 @@ void beforeSleep(struct aeEventLoop *eventLoop) {
     trackingBroadcastInvalidationMessages();
 
     /* Write the AOF buffer on disk */
+    // 先刷盘，再响应客户端
     flushAppendOnlyFile(0);
 
     /* Handle writes with pending output buffers. */
@@ -3492,6 +3510,7 @@ void InitServerLast() {
 /* Parse the flags string description 'strflags' and set them to the
  * command 'c'. If the flags are all valid C_OK is returned, otherwise
  * C_ERR is returned (yet the recognized flags are set in the command). */
+// 设置命令的flag
 int populateCommandTableParseFlags(struct redisCommand *c, char *strflags) {
     int argc;
     sds *argv;
@@ -3502,11 +3521,12 @@ int populateCommandTableParseFlags(struct redisCommand *c, char *strflags) {
 
     for (int j = 0; j < argc; j++) {
         char *flag = argv[j];
+        // 设置写属性
         if (!strcasecmp(flag, "write")) {
             c->flags |= CMD_WRITE | CMD_CATEGORY_WRITE;
         } else if (!strcasecmp(flag, "read-only")) {
             c->flags |= CMD_READONLY | CMD_CATEGORY_READ;
-        } else if (!strcasecmp(flag, "use-memory")) {
+        } else if (!strcasecmp(flag, "use-memory")) {       // 设置禁止oom
             c->flags |= CMD_DENYOOM;
         } else if (!strcasecmp(flag, "admin")) {
             c->flags |= CMD_ADMIN | CMD_CATEGORY_ADMIN | CMD_CATEGORY_DANGEROUS;
@@ -3679,6 +3699,7 @@ struct redisCommand *lookupCommandOrOriginal(sds name) {
  */
 void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
                int flags) {
+    // aof开关没关，并且标识传播aof
     if (server.aof_state != AOF_OFF && flags & PROPAGATE_AOF)
         feedAppendOnlyFile(cmd, dbid, argv, argc);
     if (flags & PROPAGATE_REPL)
@@ -3790,6 +3811,7 @@ void call(client *c, int flags) {
 
     /* Initialization: clear the flags that must be set by the command on
      * demand, and initialize the array for additional commands propagation. */
+    // 去掉这些标识
     c->flags &= ~(CLIENT_FORCE_AOF | CLIENT_FORCE_REPL | CLIENT_PREVENT_PROP);
     redisOpArray prev_also_propagate = server.also_propagate;
     redisOpArrayInit(&server.also_propagate);
@@ -3807,6 +3829,7 @@ void call(client *c, int flags) {
     // 调用函数，执行命令
     c->cmd->proc(c);
     duration = ustime() - start;
+    // 写命令，dirty会新增
     dirty = server.dirty - dirty;
     if (dirty < 0) dirty = 0;
 
@@ -3850,6 +3873,7 @@ void call(client *c, int flags) {
     }
 
     /* Propagate the command into the AOF and replication link */
+    // 传播这个命令
     if (flags & CMD_CALL_PROPAGATE &&
         (c->flags & CLIENT_PREVENT_PROP) != CLIENT_PREVENT_PROP) {
         int propagate_flags = PROPAGATE_NONE;
@@ -3876,6 +3900,7 @@ void call(client *c, int flags) {
         /* Call propagate() only if at least one of AOF / replication
          * propagation is needed. Note that modules commands handle replication
          * in an explicit way, so we never replicate them automatically. */
+        // 传播命令
         if (propagate_flags != PROPAGATE_NONE && !(c->cmd->flags & CMD_MODULE))
             propagate(c->cmd, c->db->id, c->argv, c->argc, propagate_flags);
     }
@@ -5541,6 +5566,7 @@ void setupChildSignalHandlers(void) {
  * should close the resources not used by the child process, so that if the
  * parent restarts it can bind/lock despite the child possibly still running. */
 void closeClildUnusedResourceAfterFork() {
+    // 关闭对文件描述符的引用
     closeListeningSockets(0);
     if (server.cluster_enabled && server.cluster_config_file_lock_fd != -1)
         close(server.cluster_config_file_lock_fd); /* don't care if this fails */
@@ -5555,18 +5581,25 @@ void closeClildUnusedResourceAfterFork() {
 int redisFork(int purpose) {
     int childpid;
     long long start = ustime();
+    // fork是copy-on-write
     if ((childpid = fork()) == 0) {
         /* Child */
         server.in_fork_child = purpose;
         setOOMScoreAdj(CONFIG_OOM_BGCHILD);
+        // 设置信号处理线程
         setupChildSignalHandlers();
+        // 设置重哈希策略
         updateDictResizePolicy();
+        // 关闭子进程不使用的资源（文件描述符等）
         closeClildUnusedResourceAfterFork();
     } else {
         /* Parent */
+        // 记录fork子进程消耗的时间
         server.stat_fork_time = ustime() - start;
+        // 统计（估算）fork的内存复制速率
         server.stat_fork_rate = (double) zmalloc_used_memory() * 1000000 / server.stat_fork_time / (1024 * 1024 * 1024);
         /* GB per second. */
+        // 超过了阈值，要记录起来
         latencyAddSampleIfNeeded("fork", server.stat_fork_time/1000);
         if (childpid == -1) {
             return -1;
@@ -5576,6 +5609,7 @@ int redisFork(int purpose) {
 }
 
 void sendChildCOWInfo(int ptype, char *pname) {
+    // 子进程私有页开销
     size_t private_dirty = zmalloc_get_private_dirty(-1);
 
     if (private_dirty) {
@@ -5604,17 +5638,21 @@ int checkForSentinelMode(int argc, char **argv) {
 /* Function called at startup to load RDB or AOF file in memory. */
 void loadDataFromDisk(void) {
     long long start = ustime();
+    // 如果aof是开启的
     if (server.aof_state == AOF_ON) {
+        // 加载aof文件
         if (loadAppendOnlyFile(server.aof_filename) == C_OK)
             serverLog(LL_NOTICE, "DB loaded from append only file: %.3f seconds", (float) (ustime() - start) / 1000000);
-    } else {
+    } else {        // aof没开就加载rdb文件
         rdbSaveInfo rsi = RDB_SAVE_INFO_INIT;
         errno = 0; /* Prevent a stale value from affecting error checking */
+        // 加载rdb文件
         if (rdbLoad(server.rdb_filename, &rsi,RDBFLAGS_NONE) == C_OK) {
             serverLog(LL_NOTICE, "DB loaded from disk: %.3f seconds",
                       (float) (ustime() - start) / 1000000);
 
             /* Restore the replication ID / offset from the RDB file. */
+            // 主从同步相关
             if ((server.masterhost ||
                  (server.cluster_enabled &&
                   nodeIsSlave(server.cluster->myself))) &&
@@ -5728,6 +5766,7 @@ int redisIsSupervised(int mode) {
     return 0;
 }
 
+// 判断是不是master节点
 int iAmMaster(void) {
     return ((!server.cluster_enabled && server.masterhost == NULL) ||
             (server.cluster_enabled && nodeIsMaster(server.cluster->myself)));
@@ -5769,7 +5808,9 @@ int main(int argc, char **argv) {
 #endif
     setlocale(LC_COLLATE, "");
     tzset(); /* Populates 'timezone' global. */
-    zmalloc_set_oom_handler(redisOutOfMemoryHandler); // 设置oom处理函数
+    // 设置oom处理函数，直接panic
+    zmalloc_set_oom_handler(redisOutOfMemoryHandler);
+    // 随机种子
     srand(time(NULL) ^ getpid());
     gettimeofday(&tv,NULL);
     init_genrand64(((long long) tv.tv_sec * 1000000 + tv.tv_usec) ^ getpid());
@@ -5829,12 +5870,15 @@ int main(int argc, char **argv) {
         char *configfile = NULL;
 
         /* Handle special options --help and --version */
+        // 版本命令，输出版本信息
         if (strcmp(argv[1], "-v") == 0 ||
             strcmp(argv[1], "--version") == 0)
             version();
+        // 帮助命令，输出帮助信息
         if (strcmp(argv[1], "--help") == 0 ||
             strcmp(argv[1], "-h") == 0)
             usage();
+        // 测试内存用：测试内存是否能稳定分配和使用
         if (strcmp(argv[1], "--test-memory") == 0) {
             if (argc == 3) {
                 memtest(atoi(argv[2]), 50);
@@ -5847,11 +5891,15 @@ int main(int argc, char **argv) {
         }
 
         /* First argument is the config file name? */
+        // 文件路径一定在第一个参数（如果有的话）
+        // 不以"-"开头，这个参数是文件路径
         if (argv[j][0] != '-' || argv[j][1] != '-') {
+            // 配置文件
             configfile = argv[j];
             server.configfile = getAbsolutePath(configfile);
             /* Replace the config file in server.exec_argv with
              * its absolute path. */
+            // 将命令用绝对路径的方式保存
             zfree(server.exec_argv[j]);
             server.exec_argv[j] = zstrdup(server.configfile);
             j++;
@@ -5861,9 +5909,12 @@ int main(int argc, char **argv) {
          * configuration file. For instance --port 6380 will generate the
          * string "port 6380\n" to be parsed after the actual file name
          * is parsed, if any. */
+        // 解析启动命令的参数
         while (j != argc) {
+            // 以 "--" 开头
             if (argv[j][0] == '-' && argv[j][1] == '-') {
                 /* Option name */
+                // strcmp等于0，说明字符串相等，略过
                 if (!strcmp(argv[j], "--check-rdb")) {
                     /* Argument has no options, need to skip for parsing. */
                     j++;
@@ -5879,6 +5930,7 @@ int main(int argc, char **argv) {
             }
             j++;
         }
+        // sentinel模式必须指定配置文件
         if (server.sentinel_mode && configfile && *configfile == '-') {
             serverLog(LL_WARNING,
                       "Sentinel config from STDIN not allowed.");
@@ -5887,6 +5939,7 @@ int main(int argc, char **argv) {
             exit(1);
         }
         resetServerSaveParams();
+        // 解析配置
         loadServerConfig(configfile, options);
         sdsfree(options);
     }
@@ -5930,6 +5983,7 @@ int main(int argc, char **argv) {
         linuxMemoryWarnings();
 #if defined (__arm64__)
         int ret;
+        // 旧的内核版本存在一些bug
         if ((ret = linuxMadvFreeForkBugCheck())) {
             if (ret == 1)
                 serverLog(

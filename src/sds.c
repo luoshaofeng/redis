@@ -419,6 +419,7 @@ sds sdscatlen(sds s, const void *t, size_t len) {
  *
  * After the call, the passed sds string is no longer valid and all the
  * references must be substituted with the new pointer returned by the call. */
+// 拼接字符串
 sds sdscat(sds s, const char *t) {
     return sdscatlen(s, t, strlen(t));
 }

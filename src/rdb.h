@@ -123,8 +123,10 @@
 
 /* flags on the purpose of rdb save or load */
 #define RDBFLAGS_NONE 0                 /* No special RDB loading. */
+// 保存过程中会生成 AOF 前缀（用于 AOF 重写）
 #define RDBFLAGS_AOF_PREAMBLE (1<<0)    /* Load/save the RDB as AOF preamble. */
 #define RDBFLAGS_REPLICATION (1<<1)     /* Load/save for SYNC. */
+// 允许重复key当加载时
 #define RDBFLAGS_ALLOW_DUP (1<<2)       /* Allow duplicated keys when loading.*/
 
 int rdbSaveType(rio *rdb, unsigned char type);
