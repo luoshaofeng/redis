@@ -2209,7 +2209,7 @@ void checkChildrenDone(void) {
                       (int) server.rdb_child_pid,
                       (int) server.aof_child_pid,
                       (int) server.module_child_pid);
-        } else if (pid == server.rdb_child_pid) {
+        } else if (pid == server.rdb_child_pid) {       // 处理rdb子进程退出
             backgroundSaveDoneHandler(exitcode, bysignal);
             if (!bysignal && exitcode == 0) receiveChildInfo();
         } else if (pid == server.aof_child_pid) {       // 处理aof子进程退出
@@ -2399,8 +2399,8 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
              * the given amount of seconds, and if the latest bgsave was
              * successful or if, in case of an error, at least
              * CONFIG_BGSAVE_RETRY_DELAY seconds already elapsed. */
-            if (server.dirty >= sp->changes &&
-                server.unixtime - server.lastsave > sp->seconds &&
+            if (server.dirty >= sp->changes &&                  // 修改次数达到条件
+                server.unixtime - server.lastsave > sp->seconds &&      // 在一定时间内
                 (server.unixtime - server.lastbgsave_try >
                  CONFIG_BGSAVE_RETRY_DELAY ||
                  server.lastbgsave_status == C_OK)) {

@@ -1362,6 +1362,7 @@ int rdbSave(char *filename, rdbSaveInfo *rsi) {
     rio rdb;
     int error = 0;
 
+    // 打开临时文件
     snprintf(tmpfile,256,"temp-%d.rdb", (int) getpid());
     fp = fopen(tmpfile,"w");
     if (!fp) {
@@ -1381,12 +1382,14 @@ int rdbSave(char *filename, rdbSaveInfo *rsi) {
     if (server.rdb_save_incremental_fsync)
         rioSetAutoSync(&rdb,REDIS_AUTOSYNC_BYTES);
 
+    // 将内存数据库已rdb格式写入到rdb文件
     if (rdbSaveRio(&rdb,&error,RDBFLAGS_NONE,rsi) == C_ERR) {
         errno = error;
         goto werr;
     }
 
     /* Make sure data will not remain on the OS's output buffers */
+    // 刷盘
     if (fflush(fp)) goto werr;
     if (fsync(fileno(fp))) goto werr;
     if (fclose(fp)) { fp = NULL; goto werr; }
@@ -1394,6 +1397,7 @@ int rdbSave(char *filename, rdbSaveInfo *rsi) {
     
     /* Use RENAME to make sure the DB file is changed atomically only
      * if the generate DB file is ok. */
+    // 重命名文件
     if (rename(tmpfile,filename) == -1) {
         char *cwdp = getcwd(cwd,MAXPATHLEN);
         serverLog(LL_WARNING,
@@ -2566,10 +2570,10 @@ static void backgroundSaveDoneHandlerSocket(int exitcode, int bysignal) {
 void backgroundSaveDoneHandler(int exitcode, int bysignal) {
     int type = server.rdb_child_type;
     switch(server.rdb_child_type) {
-    case RDB_CHILD_TYPE_DISK:
+    case RDB_CHILD_TYPE_DISK:        // 本地持久化
         backgroundSaveDoneHandlerDisk(exitcode,bysignal);
         break;
-    case RDB_CHILD_TYPE_SOCKET:
+    case RDB_CHILD_TYPE_SOCKET:     // 主从同步
         backgroundSaveDoneHandlerSocket(exitcode,bysignal);
         break;
     default:
@@ -2583,6 +2587,7 @@ void backgroundSaveDoneHandler(int exitcode, int bysignal) {
     server.rdb_save_time_start = -1;
     /* Possibly there are slaves waiting for a BGSAVE in order to be served
      * (the first stage of SYNC is a bulk transfer of dump.rdb) */
+    // 主从同步相关
     updateSlavesWaitingBgsave((!bysignal && exitcode == 0) ? C_OK : C_ERR, type);
 }
 

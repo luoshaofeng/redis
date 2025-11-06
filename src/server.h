@@ -1392,6 +1392,7 @@ struct redisServer {
     sds aof_child_diff; /* AOF diff accumulator child side. */
     /* RDB persistence */
     long long dirty; /* Changes to DB from the last save */
+    // bgsave之前的dirty数
     long long dirty_before_bgsave; /* Used to restore dirty on failed BGSAVE */
     // rdb子线程ID
     pid_t rdb_child_pid; /* PID of RDB saving child */
@@ -1406,7 +1407,9 @@ struct redisServer {
     int rdb_del_sync_files; /* Remove RDB files used only for SYNC if
                                        the instance does not use persistence. */
     time_t lastsave; /* Unix time of last successful save */
+    // 最后一次bgsave的时间
     time_t lastbgsave_try; /* Unix time of last attempted bgsave */
+    // 最后一次rdb持久化耗费的时间
     time_t rdb_save_time_last; /* Time used by last RDB save run. */
     time_t rdb_save_time_start; /* Current RDB save start time. */
     // 执行bgsave在合适的时候
