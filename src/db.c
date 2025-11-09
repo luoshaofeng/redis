@@ -398,13 +398,14 @@ long long emptyDbStructure(redisDb *dbarray, int dbnum, int async,
 
     for (int j = startdb; j <= enddb; j++) {
         removed += dictSize(dbarray[j].dict);
-        if (async) {
+        if (async) {        // 异步删除
             emptyDbAsync(&dbarray[j]);
-        } else {
+        } else {        // 同步删除
             dictEmpty(dbarray[j].dict, callback);
             dictEmpty(dbarray[j].expires, callback);
         }
         /* Because all keys of database are removed, reset average ttl. */
+        // 重置
         dbarray[j].avg_ttl = 0;
         dbarray[j].expires_cursor = 0;
     }
@@ -447,6 +448,7 @@ long long emptyDb(int dbnum, int flags, void (callback)(void *)) {
     signalFlushedDb(dbnum);
 
     /* Empty redis database structure. */
+    // 删除的数量
     removed = emptyDbStructure(server.db, dbnum, async, callback);
 
     /* Flush slots to keys map if enable cluster, we can flush entire

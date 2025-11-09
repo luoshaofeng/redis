@@ -1336,12 +1336,18 @@ int rdbSaveRioWithEOFMark(rio *rdb, int *error, rdbSaveInfo *rsi) {
     char eofmark[RDB_EOF_MARK_SIZE];
 
     startSaving(RDBFLAGS_REPLICATION);
+    // 取随机字符作为传输的末尾
     getRandomHexChars(eofmark,RDB_EOF_MARK_SIZE);
     if (error) *error = 0;
+    // 开头
     if (rioWrite(rdb,"$EOF:",5) == 0) goto werr;
+    // 结束标识
     if (rioWrite(rdb,eofmark,RDB_EOF_MARK_SIZE) == 0) goto werr;
+    // 换行
     if (rioWrite(rdb,"\r\n",2) == 0) goto werr;
+    // 开始写整个rdb数据
     if (rdbSaveRio(rdb,error,RDBFLAGS_NONE,rsi) == C_ERR) goto werr;
+    // 写完写结束标识
     if (rioWrite(rdb,eofmark,RDB_EOF_MARK_SIZE) == 0) goto werr;
     stopSaving(1);
     return C_OK;
@@ -2516,6 +2522,7 @@ static void backgroundSaveDoneHandlerDisk(int exitcode, int bysignal) {
     if (!bysignal && exitcode == 0) {
         serverLog(LL_NOTICE,
             "Background saving terminated with success");
+        // 更新主库目前的dirty数（触发rdb持久化）
         server.dirty = server.dirty - server.dirty_before_bgsave;
         server.lastsave = time(NULL);
         server.lastbgsave_status = C_OK;
@@ -2551,6 +2558,7 @@ static void backgroundSaveDoneHandlerSocket(int exitcode, int bysignal) {
         serverLog(LL_WARNING,
             "Background transfer terminated by signal %d", bysignal);
     }
+    // 重置资源
     if (server.rdb_child_exit_pipe!=-1)
         close(server.rdb_child_exit_pipe);
     aeDeleteFileEvent(server.el, server.rdb_pipe_read, AE_READABLE);
@@ -2573,7 +2581,7 @@ void backgroundSaveDoneHandler(int exitcode, int bysignal) {
     case RDB_CHILD_TYPE_DISK:        // 本地持久化
         backgroundSaveDoneHandlerDisk(exitcode,bysignal);
         break;
-    case RDB_CHILD_TYPE_SOCKET:     // 主从同步
+    case RDB_CHILD_TYPE_SOCKET:     // 主从同步，rdb通过socket传输
         backgroundSaveDoneHandlerSocket(exitcode,bysignal);
         break;
     default:
@@ -2587,7 +2595,7 @@ void backgroundSaveDoneHandler(int exitcode, int bysignal) {
     server.rdb_save_time_start = -1;
     /* Possibly there are slaves waiting for a BGSAVE in order to be served
      * (the first stage of SYNC is a bulk transfer of dump.rdb) */
-    // 主从同步相关
+    // 更新待同步（待开始、待结束）执行的从库状态
     updateSlavesWaitingBgsave((!bysignal && exitcode == 0) ? C_OK : C_ERR, type);
 }
 
@@ -2603,6 +2611,7 @@ void killRDBChild(void) {
 
 /* Spawn an RDB child that writes the RDB to the sockets of the slaves
  * that are currently in SLAVE_STATE_WAIT_BGSAVE_START state. */
+// rdb通过socket传输
 int rdbSaveToSlavesSockets(rdbSaveInfo *rsi) {
     listNode *ln;
     listIter li;
@@ -2619,6 +2628,7 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi) {
      * the parent, we can't let it write directly to the sockets, since in case
      * of TLS we must let the parent handle a continuous TLS state when the
      * child terminates and parent takes over. */
+    // 创建一对管道
     if (pipe(pipefds) == -1) return C_ERR;
     server.rdb_pipe_read = pipefds[0]; /* read end */
     rdb_pipe_write = pipefds[1]; /* write end */
@@ -2626,6 +2636,7 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi) {
 
     /* create another pipe that is used by the parent to signal to the child
      * that it can exit. */
+    // 创建另一对管道
     if (pipe(pipefds) == -1) {
         close(rdb_pipe_write);
         close(server.rdb_pipe_read);
@@ -2636,6 +2647,7 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi) {
 
     /* Collect the connections of the replicas we want to transfer
      * the RDB to, which are i WAIT_BGSAVE_START state. */
+    // 所有从库的conn
     server.rdb_pipe_conns = zmalloc(sizeof(connection *)*listLength(server.slaves));
     server.rdb_pipe_numconns = 0;
     server.rdb_pipe_numconns_writing = 0;
@@ -2643,43 +2655,56 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi) {
     while((ln = listNext(&li))) {
         client *slave = ln->value;
         if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) {
+            // 保存从库的连接
             server.rdb_pipe_conns[server.rdb_pipe_numconns++] = slave->conn;
+            // 响应全量同步
             replicationSetupSlaveForFullResync(slave,getPsyncInitialOffset());
         }
     }
 
     /* Create the child process. */
+    // 创建子进程信息管道
     openChildInfoPipe();
+    // 创建子进程
     if ((childpid = redisFork(CHILD_TYPE_RDB)) == 0) {
         /* Child */
         int retval, dummy;
         rio rdb;
 
+        // 初始化rdb（rdb_pipe_write 阻塞写）
         rioInitWithFd(&rdb,rdb_pipe_write);
 
+        // 设置进程相关属性
         redisSetProcTitle("redis-rdb-to-slaves");
         redisSetCpuAffinity(server.bgsave_cpulist);
 
+        // 整个rdb数据通过socket写到子进程
         retval = rdbSaveRioWithEOFMark(&rdb,NULL,rsi);
+        // 刷出去
         if (retval == C_OK && rioFlush(&rdb) == 0)
             retval = C_ERR;
 
+        // 报告子进程的信息
         if (retval == C_OK) {
             sendChildCOWInfo(CHILD_TYPE_RDB, "RDB");
         }
 
+        // 释放资源
         rioFreeFd(&rdb);
         /* wake up the reader, tell it we're done. */
+        // 关闭写端，告诉读端，整个文件已经写完了
         close(rdb_pipe_write);
         close(server.rdb_child_exit_pipe); /* close write end so that we can detect the close on the parent. */
         /* hold exit until the parent tells us it's safe. we're not expecting
          * to read anything, just get the error when the pipe is closed. */
         dummy = read(safe_to_exit_pipe, pipefds, 1);
         UNUSED(dummy);
+        // 退出进程
         exitFromChild((retval == C_OK) ? 0 : 1);
     } else {
         /* Parent */
         close(safe_to_exit_pipe);
+        // 异常
         if (childpid == -1) {
             serverLog(LL_WARNING,"Can't save in background: fork: %s",
                 strerror(errno));
@@ -2688,12 +2713,14 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi) {
              * all the slaves in BGSAVE_START state, but an early call to
              * replicationSetupSlaveForFullResync() turned it into BGSAVE_END */
             listRewind(server.slaves,&li);
+            // 恢复状态
             while((ln = listNext(&li))) {
                 client *slave = ln->value;
                 if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_END) {
                     slave->replstate = SLAVE_STATE_WAIT_BGSAVE_START;
                 }
             }
+            // 关闭资源
             close(rdb_pipe_write);
             close(server.rdb_pipe_read);
             zfree(server.rdb_pipe_conns);
@@ -2707,8 +2734,10 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi) {
             server.rdb_save_time_start = time(NULL);
             server.rdb_child_pid = childpid;
             server.rdb_child_type = RDB_CHILD_TYPE_SOCKET;
+            // 更新为尽量避免重哈希
             updateDictResizePolicy();
             close(rdb_pipe_write); /* close write in parent so that it can detect the close on the child. */
+            // 注册epoll节点，可读事件，处理函数为 rdbPipeReadHandler
             if (aeCreateFileEvent(server.el, server.rdb_pipe_read, AE_READABLE, rdbPipeReadHandler,NULL) == AE_ERR) {
                 serverPanic("Unrecoverable error creating server.rdb_pipe_read file event.");
             }
@@ -2789,6 +2818,7 @@ rdbSaveInfo *rdbPopulateSaveInfo(rdbSaveInfo *rsi) {
      * connects to us, the NULL repl_backlog will trigger a full
      * synchronization, at the same time we will use a new replid and clear
      * replid2. */
+    // 当前是主库 并且有 积压复制区
     if (!server.masterhost && server.repl_backlog) {
         /* Note that when server.slaveseldb is -1, it means that this master
          * didn't apply any write commands after a full synchronization.

@@ -46,6 +46,7 @@
  * done within 'timeout' milliseconds the operation succeeds and 'size' is
  * returned. Otherwise the operation fails, -1 is returned, and an unspecified
  * partial write could be performed against the file descriptor. */
+// 同步写
 ssize_t syncWrite(int fd, char *ptr, ssize_t size, long long timeout) {
     ssize_t nwritten, ret = size;
     long long start = mstime();
@@ -58,22 +59,28 @@ ssize_t syncWrite(int fd, char *ptr, ssize_t size, long long timeout) {
 
         /* Optimistically try to write before checking if the file descriptor
          * is actually writable. At worst we get EAGAIN. */
+        // 发送数据过去
         nwritten = write(fd,ptr,size);
         if (nwritten == -1) {
             if (errno != EAGAIN) return -1;
         } else {
+            // 更新发送数据
             ptr += nwritten;
             size -= nwritten;
         }
+        // 待发送字节数已全部发送完毕
         if (size == 0) return ret;
 
         /* Wait */
+        // 没写完就超时阻塞等待
         aeWait(fd,AE_WRITABLE,wait);
         elapsed = mstime() - start;
+        // 如果超时了，返回错误
         if (elapsed >= timeout) {
             errno = ETIMEDOUT;
             return -1;
         }
+        // 更新剩余时间
         remaining = timeout - elapsed;
     }
 }
@@ -82,6 +89,7 @@ ssize_t syncWrite(int fd, char *ptr, ssize_t size, long long timeout) {
  * within 'timeout' milliseconds the operation succeed and 'size' is returned.
  * Otherwise the operation fails, -1 is returned, and an unspecified amount of
  * data could be read from the file descriptor. */
+// 同步读，直到超时
 ssize_t syncRead(int fd, char *ptr, ssize_t size, long long timeout) {
     ssize_t nread, totread = 0;
     long long start = mstime();
@@ -122,13 +130,14 @@ ssize_t syncRead(int fd, char *ptr, ssize_t size, long long timeout) {
  *
  * On success the number of bytes read is returned, otherwise -1.
  * On success the string is always correctly terminated with a 0 byte. */
+// 读取一行数据
 ssize_t syncReadLine(int fd, char *ptr, ssize_t size, long long timeout) {
     ssize_t nread = 0;
 
     size--;
     while(size) {
         char c;
-
+        // 读一个字节
         if (syncRead(fd,&c,1,timeout) == -1) return -1;
         if (c == '\n') {
             *ptr = '\0';

@@ -1005,6 +1005,7 @@ void ACLInit(void) {
  *  ENONENT: if the specified user does not exist at all.
  */
 int ACLCheckUserCredentials(robj *username, robj *password) {
+    // 查找用户
     user *u = ACLGetUserByName(username->ptr,sdslen(username->ptr));
     if (u == NULL) {
         errno = ENOENT;
@@ -1012,6 +1013,7 @@ int ACLCheckUserCredentials(robj *username, robj *password) {
     }
 
     /* Disabled users can't login. */
+    // 如果用户是禁止登录的，返回错误
     if (u->flags & USER_FLAG_DISABLED) {
         errno = EINVAL;
         return C_ERR;
@@ -1019,15 +1021,20 @@ int ACLCheckUserCredentials(robj *username, robj *password) {
 
     /* If the user is configured to don't require any password, we
      * are already fine here. */
+    // 如果用户不需要密码，直接返回成功
     if (u->flags & USER_FLAG_NOPASS) return C_OK;
 
     /* Check all the user passwords for at least one to match. */
+    // 一个用户可能有多个密码
     listIter li;
     listNode *ln;
     listRewind(u->passwords,&li);
+    // 校验密码
     sds hashed = ACLHashPassword(password->ptr,sdslen(password->ptr));
     while((ln = listNext(&li))) {
+        // 取出密码
         sds thispass = listNodeValue(ln);
+        // 校验密码成功就返回
         if (!time_independent_strcmp(hashed, thispass)) {
             sdsfree(hashed);
             return C_OK;
@@ -2032,6 +2039,7 @@ void authCommand(client *c) {
         password = c->argv[2];
     }
 
+    // 校验用户名和密码
     if (ACLAuthenticateUser(c,username,password) == C_OK) {
         addReply(c,shared.ok);
     } else {

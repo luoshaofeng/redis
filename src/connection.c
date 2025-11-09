@@ -104,6 +104,7 @@ connection *connCreateAcceptedSocket(int fd) {
 
 static int connSocketConnect(connection *conn, const char *addr, int port, const char *src_addr,
                              ConnectionCallbackFunc connect_handler) {
+    // 有设置客户端ip的话，使用客户端ip绑定
     int fd = anetTcpNonBlockBestEffortBindConnect(NULL, addr, port, src_addr);
     if (fd == -1) {
         conn->state = CONN_STATE_ERROR;
@@ -111,10 +112,13 @@ static int connSocketConnect(connection *conn, const char *addr, int port, const
         return C_ERR;
     }
 
+    // 设置连接状态
     conn->fd = fd;
     conn->state = CONN_STATE_CONNECTING;
 
+    // 设置处理函数
     conn->conn_handler = connect_handler;
+    // 绑定到epoll中
     aeCreateFileEvent(server.el, conn->fd, AE_WRITABLE,
                       conn->type->ae_handler, conn);
 

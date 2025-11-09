@@ -245,6 +245,7 @@ extern int configOOMScoreAdjValuesDefaults[CONFIG_OOM_COUNT];
 #define CLIENT_MASTER_FORCE_REPLY (1<<13)  /* Queue replies even if is master */
 #define CLIENT_FORCE_AOF (1<<14)   /* Force AOF propagation of current cmd. */
 #define CLIENT_FORCE_REPL (1<<15)  /* Force replication of current cmd. */
+// 主从同步客户端，不理解PSYNC
 #define CLIENT_PRE_PSYNC (1<<16)   /* Instance don't understand PSYNC. */
 #define CLIENT_READONLY (1<<17)    /* Cluster client is in read-only state. */
 #define CLIENT_PUBSUB (1<<18)      /* Client is in Pub/Sub mode. */
@@ -314,11 +315,15 @@ extern int configOOMScoreAdjValuesDefaults[CONFIG_OOM_COUNT];
 /* Slave replication state. Used in server.repl_state for slaves to remember
  * what to do next. */
 #define REPL_STATE_NONE 0 /* No active replication */
+// 必须连接主库
 #define REPL_STATE_CONNECT 1 /* Must connect to master */
+// 连接到主库了
 #define REPL_STATE_CONNECTING 2 /* Connecting to master */
 /* --- Handshake states, must be ordered --- */
 #define REPL_STATE_RECEIVE_PONG 3 /* Wait for PING reply */
+// 向master发送认证
 #define REPL_STATE_SEND_AUTH 4 /* Send AUTH to master */
+// 接收到认证
 #define REPL_STATE_RECEIVE_AUTH 5 /* Wait for AUTH reply */
 #define REPL_STATE_SEND_PORT 6 /* Send REPLCONF listening-port */
 #define REPL_STATE_RECEIVE_PORT 7 /* Wait for REPLCONF reply */
@@ -330,23 +335,33 @@ extern int configOOMScoreAdjValuesDefaults[CONFIG_OOM_COUNT];
 #define REPL_STATE_RECEIVE_PSYNC 13 /* Wait for PSYNC reply */
 /* --- End of handshake states --- */
 #define REPL_STATE_TRANSFER 14 /* Receiving .rdb from master */
+// 已经完成同步了
 #define REPL_STATE_CONNECTED 15 /* Connected to master */
 
+
+// 主库
 /* State of slaves from the POV of the master. Used in client->replstate.
  * In SEND_BULK and ONLINE state the slave receives new updates
  * in its output queue. In the WAIT_BGSAVE states instead the server is waiting
  * to start the next background saving in order to send updates to it. */
+// 等待bgsave开始
 #define SLAVE_STATE_WAIT_BGSAVE_START 6 /* We need to produce a new RDB file. */
+// 无盘模式：socket写完了，已经同步完从库了
+// 有盘模式：文件写完了，但是还没开始同步从库
 #define SLAVE_STATE_WAIT_BGSAVE_END 7 /* Waiting RDB file creation to finish. */
+// 发送rdb文件到从库
 #define SLAVE_STATE_SEND_BULK 8 /* Sending RDB file to slave. */
+// 全量同步已完成，从库在线
 #define SLAVE_STATE_ONLINE 9 /* RDB file transmitted, sending just updates. */
 
 /* Slave capabilities. */
 #define SLAVE_CAPA_NONE 0
+// 支持无盘同步
 #define SLAVE_CAPA_EOF (1<<0)    /* Can parse the RDB EOF streaming format. */
 #define SLAVE_CAPA_PSYNC2 (1<<1) /* Supports PSYNC2 protocol. */
 
 /* Synchronous read timeout - slave side */
+// 读写timeout，发送ping和接收pong命令
 #define CONFIG_REPL_SYNCIO_TIMEOUT 5
 
 /* List related stuff */
@@ -384,9 +399,9 @@ extern int configOOMScoreAdjValuesDefaults[CONFIG_OOM_COUNT];
 #define AOF_FSYNC_EVERYSEC 2
 
 /* Replication diskless load defines */
-#define REPL_DISKLESS_LOAD_DISABLED 0
-#define REPL_DISKLESS_LOAD_WHEN_DB_EMPTY 1
-#define REPL_DISKLESS_LOAD_SWAPDB 2
+#define REPL_DISKLESS_LOAD_DISABLED 0       // 不使用无盘加载
+#define REPL_DISKLESS_LOAD_WHEN_DB_EMPTY 1      // 从库为空时才使用无盘
+#define REPL_DISKLESS_LOAD_SWAPDB 2     // 直接使用无盘加载并替换旧 DB
 
 /* TLS Client Authentication */
 #define TLS_CLIENT_AUTH_NO 0
@@ -473,6 +488,7 @@ extern int configOOMScoreAdjValuesDefaults[CONFIG_OOM_COUNT];
 
 
 /* Get the first bind addr or NULL */
+// 客户端绑定的ip
 #define NET_FIRST_BIND_ADDR (server.bindaddr_count ? server.bindaddr[0] : NULL)
 
 /* Using the following macro you can run code inside serverCron() with the
@@ -714,7 +730,9 @@ typedef struct redisDb {
     dict *watched_keys; /* WATCHED keys for MULTI/EXEC CAS */
     // 数据库ID
     int id; /* Database ID */
+    // 平均ttl
     long long avg_ttl; /* Average TTL, just for stats */
+    // 游标
     unsigned long expires_cursor; /* Cursor of the active expire cycle. */
     list *defrag_later; /* List of key names to attempt to defrag one by one, gradually. */
 } redisDb;
@@ -850,7 +868,7 @@ typedef struct client {
     sds querybuf; /* Buffer we use to accumulate client queries. */
     // 在querybuf读取的位置
     size_t qb_pos; /* The position we have read in querybuf. */
-    // 主从复制用的数据
+    // 主从复制用的数据，读取出来，但是还没应用的数据
     sds pending_querybuf; /* If this client is flagged as master, this buffer
                                represents the yet not applied portion of the
                                replication stream that we are receiving from
@@ -880,24 +898,41 @@ typedef struct client {
     time_t obuf_soft_limit_reached_time;
     uint64_t flags; /* Client flags: CLIENT_* macros. */
     int authenticated; /* Needed when the default user requires auth. */
+    // 同步状态，这是一个从库的请求
     int replstate; /* Replication state if this is a slave. */
+    // socket方式全量同步完成后会设置为1
+    // 文件方式全量同步完没有设置为1
     int repl_put_online_on_ack; /* Install slave write handler on first ACK. */
     int repldbfd; /* Replication DB file descriptor. */
+    // 复制从库 rdb偏移量
+    // 同步socket时触发写事件的偏移量
+    // 同步文件时文件的偏移量
     off_t repldboff; /* Replication DB file offset. */
+    // 复制从库 rdb文件的大小
     off_t repldbsize; /* Replication DB file size. */
+    // 复制从库 文件头
     sds replpreamble; /* Replication DB preamble. */
+    // 读取偏移量
     long long read_reploff; /* Read replication offset if this is a master. */
+    // 复制偏移量（实际已经应用：入库）
     long long reploff; /* Applied replication offset if this is a master. */
     long long repl_ack_off; /* Replication ack offset, if this is a slave. */
+    // 主从同步最后一次ack的时间
     long long repl_ack_time; /* Replication ack time, if this is a slave. */
+    // 最后一次部分写的时间
     long long repl_last_partial_write;
     /* The last time the server did a partial write from the RDB child pipe to this replica  */
+    // master的slave client：同步的初始偏移量
     long long psync_initial_offset; /* FULLRESYNC reply offset other slaves
                                        copying this slave output buffer
                                        should use. */
+    // master的同步ID
     char replid[CONFIG_RUN_ID_SIZE + 1]; /* Master replication ID (if master). */
+    // 从库监听的端口号
     int slave_listening_port; /* As configured with: REPLCONF listening-port */
+    // 从库的ip地址（不一定会设置？）
     char slave_ip[NET_IP_STR_LEN]; /* Optionally given by REPLCONF ip-address */
+    // 从库支持的同步协议
     int slave_capa; /* Slave capabilities: SLAVE_CAPA_* bitwise OR. */
     multiState mstate; /* MULTI/EXEC state */
     int btype; /* Type of blocking op if CLIENT_BLOCKED. */
@@ -1077,6 +1112,8 @@ struct redisMemOverhead {
  * top-level master. */
 typedef struct rdbSaveInfo {
     /* Used saving and loading. */
+    // master选中的db（正在同步的数据库）
+    // 会保存到rdb的文件里
     int repl_stream_db; /* DB to select in server.master client. */
 
     /* Used only loading. */
@@ -1211,6 +1248,7 @@ struct redisServer {
     list *clients_pending_write; /* There is to write or install handler. */
     // 客户端待读取数据
     list *clients_pending_read; /* Client has pending read socket buffers. */
+    // slaves 从库列表（从库的client）
     list *slaves, *monitors; /* List of slaves and MONITORs */
     // 当前执行的客户端命令
     client *current_client; /* Current client executing the command. */
@@ -1270,7 +1308,9 @@ struct redisServer {
     // 统计 fork 内存复制速率
     double stat_fork_rate; /* Fork rate in GB/sec. */
     long long stat_rejected_conn; /* Clients rejected because of maxclients */
+    // 全量同步的次数
     long long stat_sync_full; /* Number of full resyncs with slaves. */
+    // 接受 PSYNC 请求的次数
     long long stat_sync_partial_ok; /* Number of accepted PSYNC requests. */
     long long stat_sync_partial_err; /* Number of unaccepted PSYNC requests. */
     list *slowlog; /* SLOWLOG list of commands */
@@ -1278,7 +1318,8 @@ struct redisServer {
     long long slowlog_log_slower_than; /* SLOWLOG time limit (to get logged) */
     unsigned long slowlog_max_len; /* SLOWLOG max number of items logged */
     struct malloc_stats cron_malloc_stats; /* sampled in serverCron(). */
-    _Atomic long long stat_net_input_bytes; /* 从网络读取的字节数 Bytes read from network. */
+    // 从网络读取的字节数
+    _Atomic long long stat_net_input_bytes; /* Bytes read from network. */
     // 网络写入的总数据量
     _Atomic long long stat_net_output_bytes; /* Bytes written to network. */
     size_t stat_rdb_cow_bytes; /* Copy on write bytes during RDB saving. */
@@ -1404,6 +1445,7 @@ struct redisServer {
     // rdb压缩
     int rdb_compression; /* Use compression in RDB? */
     int rdb_checksum; /* Use RDB checksum? */
+    // rdb删除同步文件
     int rdb_del_sync_files; /* Remove RDB files used only for SYNC if
                                        the instance does not use persistence. */
     time_t lastsave; /* Unix time of last successful save */
@@ -1417,8 +1459,12 @@ struct redisServer {
     int rdb_child_type; /* Type of save by active child. */
     int lastbgsave_status; /* C_OK or C_ERR */
     int stop_writes_on_bgsave_err; /* Don't allow writes if can't BGSAVE */
+    // rdb socket传输的时候开启，读管道（非阻塞）
+    // 读事件处理函数为 rdbPipeReadHandler
     int rdb_pipe_read; /* RDB pipe used to transfer the rdb data */
     /* to the parent process in diskless repl. */
+    // rdb socket传输的时候开启，写管道
+    // 用于通知子进程主进程已经完成同步
     int rdb_child_exit_pipe; /* Used by the diskless parent allow child exit. */
     connection **rdb_pipe_conns; /* Connections which are currently the */
     int rdb_pipe_numconns; /* target of diskless rdb fork child. */
@@ -1451,53 +1497,79 @@ struct redisServer {
     char *syslog_ident; /* Syslog ident */
     int syslog_facility; /* Syslog facility */
     /* Replication (master) */
+    // 当前主从同步master的同步ID
+    // master：本服务的runid
     char replid[CONFIG_RUN_ID_SIZE + 1]; /* My current replication ID. */
+    // 从库也能作为主库进行主从同步，从库用的
     char replid2[CONFIG_RUN_ID_SIZE + 1]; /* replid inherited from master*/
     // 主节点的可复制偏移量
     long long master_repl_offset; /* My current replication offset */
     long long second_replid_offset; /* Accept offsets up to this for replid2. */
+    // 在主从同步中最后选中的数据库
     int slaveseldb; /* Last SELECTed DB in replication output */
     int repl_ping_slave_period; /* Master pings the slave every N seconds */
+    // 用于部分同步（复制积压）
     char *repl_backlog; /* Replication backlog for partial syncs */
+    // 积压复制缓冲区的字节大小，默认1mb
     long long repl_backlog_size; /* Backlog circular buffer size */
+    // 缓冲区的数据长度
     long long repl_backlog_histlen; /* Backlog actual data length */
     long long repl_backlog_idx; /* Backlog circular buffer current offset,
                                        that is the next byte will'll write to.*/
+    // master的同步偏移量
+    // 初始化为：server.master_repl_offset + 1;
     long long repl_backlog_off; /* Replication "master offset" of first
                                        byte in the replication backlog buffer.*/
+    // 任务积压，但是没有从库的时间限制
     time_t repl_backlog_time_limit; /* Time without slaves after the backlog
                                        gets released. */
     time_t repl_no_slaves_since; /* We have no slaves since that time.
                                        Only valid if server.slaves len is 0. */
+    // 主库要求的最少从库数量
     int repl_min_slaves_to_write; /* Min number of slaves to write. */
+    // 允许的最大复制延迟（秒）
     int repl_min_slaves_max_lag; /* Max lag of <count> slaves to write. */
+    // 健康的从库数（复制延迟在配置范围内）
     int repl_good_slaves_count; /* Number of slaves with lag <= max_lag. */
     int repl_diskless_sync; /* Master send RDB to slaves sockets directly. */
     int repl_diskless_load; /* Slave parse RDB directly from the socket.
                                      * see REPL_DISKLESS_LOAD_* enum */
+    // 延迟同步
     int repl_diskless_sync_delay; /* Delay to start a diskless repl BGSAVE. */
     /* Replication (slave) */
+    // 主从同步，主节点的账号密码
     char *masteruser; /* AUTH with this user and masterauth with master */
     char *masterauth; /* AUTH with this password with master */
     // master节点的host，从节点用
     char *masterhost; /* Hostname of master */
+    // master节点的端口号
     int masterport; /* Port of master */
+    // 同步超时时间
     int repl_timeout; /* Timeout after N seconds of master idle */
-    client *master; /* 命令是master给slave的？ Client that is master for this slave */
+    // 从库的master连接 master向从库发送数据
+    client *master; /*  Client that is master for this slave */
     client *cached_master; /* Cached master to be reused for PSYNC. */
     int repl_syncio_timeout; /* Timeout for synchronous I/O calls */
     int repl_state; /* Replication status if the instance is a slave */
+    // 同步期间rdb文件的大小
     off_t repl_transfer_size; /* Size of RDB to read from master during sync. */
+    // 已同步的rdb字节数
     off_t repl_transfer_read; /* Amount of RDB read from master during sync. */
+    // 最后一次同步量
     off_t repl_transfer_last_fsync_off; /* Offset when we fsync-ed last time. */
+    // 从库 到 主库的连接
     connection *repl_transfer_s; /* Slave -> Master SYNC connection */
+    // 主从同步 临时文件描述符
     int repl_transfer_fd; /* Slave -> Master SYNC temp file descriptor */
+    // 主从同步 临时文件名
     char *repl_transfer_tmpfile; /* Slave-> master SYNC temp file name */
+    // 最新的从master读取数据的时间
     time_t repl_transfer_lastio; /* Unix time of the latest read, for timeout */
     int repl_serve_stale_data; /* Serve stale data when link is down? */
     int repl_slave_ro; /* Slave is read only? */
     int repl_slave_ignore_maxmemory; /* If true slaves do not evict. */
     time_t repl_down_since; /* Unix time at which link with master went down */
+    // 主从同步，不延迟发送包（不合并包）
     int repl_disable_tcp_nodelay; /* Disable TCP_NODELAY after SYNC? */
     int slave_priority; /* Reported in INFO and used by Sentinel. */
     int slave_announce_port; /* Give the master this listening port. */
@@ -1505,8 +1577,10 @@ struct redisServer {
     /* The following two fields is where we store master PSYNC replid/offset
      * while the PSYNC is in progress. At the end we'll copy the fields into
      * the server->master client structure. */
+    // master的runid
     char master_replid[CONFIG_RUN_ID_SIZE + 1]; /* Master PSYNC runid. */
     long long master_initial_offset; /* Master PSYNC offset. */
+    // 全量同步时要清空数据库，这里配置同步清空，还是惰性清空
     int repl_slave_lazy_flush; /* Lazy FLUSHALL before loading DB? */
     /* Replication script cache. */
     dict *repl_scriptcache_dict; /* SHA1 all slaves are aware of. */
@@ -1563,7 +1637,9 @@ struct redisServer {
     _Atomic time_t unixtime; /* Unix time sampled every cron cycle. */
     time_t timezone; /* Cached timezone. As set by tzset(). */
     int daylight_active; /* Currently in daylight saving time. */
+    // 毫秒级时间戳
     mstime_t mstime; /* 'unixtime' in milliseconds. */
+    // 微妙级时间戳
     ustime_t ustime; /* 'unixtime' in microseconds. */
     /* Pubsub */
     dict *pubsub_channels; /* Map channels to list of subscribed clients */
@@ -2744,6 +2820,7 @@ int dbDelete(redisDb *db, robj *key);
 robj *dbUnshareStringValue(redisDb *db, robj *key, robj *o);
 
 #define EMPTYDB_NO_FLAGS 0      /* No flags. */
+// 异步清空DB
 #define EMPTYDB_ASYNC (1<<0)    /* Reclaim memory in another thread. */
 
 long long emptyDb(int dbnum, int flags, void (callback)(void *));

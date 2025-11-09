@@ -253,6 +253,7 @@ static int anetSetReuseAddr(char *err, int fd) {
     int yes = 1;
     /* Make sure connection-intensive things like the redis benchmark
      * will be able to close/open sockets a zillion of times */
+    // SO_REUSEADDR允许重新绑定一个timewait状态的地址和端口
     if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1) {
         anetSetError(err, "setsockopt SO_REUSEADDR: %s", strerror(errno));
         return ANET_ERR;
@@ -279,6 +280,7 @@ static int anetCreateSocket(char *err, int domain) {
 #define ANET_CONNECT_NONE 0
 #define ANET_CONNECT_NONBLOCK 1
 #define ANET_CONNECT_BE_BINDING 2 /* Best effort binding. */
+// 返回文件描述符
 static int anetTcpGenericConnect(char *err, const char *addr, int port,
                                  const char *source_addr, int flags)
 {
@@ -288,7 +290,7 @@ static int anetTcpGenericConnect(char *err, const char *addr, int port,
 
     snprintf(portstr,sizeof(portstr),"%d",port);
     memset(&hints,0,sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
+    hints.ai_family = AF_UNSPEC;    // 未指定协议族
     hints.ai_socktype = SOCK_STREAM;
 
     if ((rv = getaddrinfo(addr,portstr,&hints,&servinfo)) != 0) {
@@ -299,11 +301,14 @@ static int anetTcpGenericConnect(char *err, const char *addr, int port,
         /* Try to create the socket and to connect it.
          * If we fail in the socket() call, or on connect(), we retry with
          * the next entry in servinfo. */
+        // 创建socket
         if ((s = socket(p->ai_family,p->ai_socktype,p->ai_protocol)) == -1)
             continue;
+        // 运行复用处于timewait状态的连接地址和端口
         if (anetSetReuseAddr(err,s) == ANET_ERR) goto error;
         if (flags & ANET_CONNECT_NONBLOCK && anetNonBlock(err,s) != ANET_OK)
             goto error;
+        // 如果指定了客户端地址
         if (source_addr) {
             int bound = 0;
             /* Using getaddrinfo saves us from self-determining IPv4 vs IPv6 */
@@ -313,6 +318,7 @@ static int anetTcpGenericConnect(char *err, const char *addr, int port,
                 goto error;
             }
             for (b = bservinfo; b != NULL; b = b->ai_next) {
+                // 绑定地址
                 if (bind(s,b->ai_addr,b->ai_addrlen) != -1) {
                     bound = 1;
                     break;
@@ -324,6 +330,7 @@ static int anetTcpGenericConnect(char *err, const char *addr, int port,
                 goto error;
             }
         }
+        // 建立连接
         if (connect(s,p->ai_addr,p->ai_addrlen) == -1) {
             /* If the socket is non-blocking, it is ok for connect() to
              * return an EINPROGRESS error here. */
@@ -369,6 +376,7 @@ int anetTcpNonBlockConnect(char *err, const char *addr, int port)
     return anetTcpGenericConnect(err,addr,port,NULL,ANET_CONNECT_NONBLOCK);
 }
 
+// 返回文件描述符
 int anetTcpNonBlockBindConnect(char *err, const char *addr, int port,
                                const char *source_addr)
 {

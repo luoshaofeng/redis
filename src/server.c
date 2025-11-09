@@ -2452,6 +2452,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
 
     /* Replication cron function -- used to reconnect to master,
      * detect transfer failures, start background RDB transfers and so forth. */
+    // 主从复制
     run_with_period(1000) replicationCron();
 
     /* Run the Redis Cluster cron. */
@@ -4183,6 +4184,7 @@ int processCommand(client *c) {
 
     /* Don't accept write commands if this is a read only slave. But
      * accept write commands if this is our master. */
+    // 从库只读，非主库请求，写操作，拒绝
     if (server.masterhost && server.repl_slave_ro &&
         !(c->flags & CLIENT_MASTER) &&
         is_write_command) {

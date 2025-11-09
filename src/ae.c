@@ -404,7 +404,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags) {
         struct timeval tv, *tvp;
 
         if (flags & AE_TIME_EVENTS && !(flags & AE_DONT_WAIT))
-            shortest = aeSearchNearestTimer(eventLoop); //找到serverCron
+            shortest = aeSearchNearestTimer(eventLoop); //找到 serverCron
         if (shortest) {
             long now_sec, now_ms;
 

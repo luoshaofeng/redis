@@ -1960,8 +1960,10 @@ int processMultibulkBuffer(client *c) {
 void commandProcessed(client *c) {
     // 主从同步相关
     long long prev_offset = c->reploff;
+    // 主从同步： 主库的请求
     if (c->flags & CLIENT_MASTER && !(c->flags & CLIENT_MULTI)) {
         /* Update the applied replication offset of our master. */
+        // 更新已经应用的偏移量
         c->reploff = c->read_reploff - sdslen(c->querybuf) + c->qb_pos;
     }
 
@@ -1981,6 +1983,7 @@ void commandProcessed(client *c) {
      * part of the replication stream, will be propagated to the
      * sub-replicas and to the replication backlog. */
     if (c->flags & CLIENT_MASTER) {
+        // 应用的字节数（当前执行的命令）
         long long applied = c->reploff - prev_offset;
         if (applied) {
             replicationFeedSlavesFromMasterStream(server.slaves,
@@ -2189,7 +2192,7 @@ void readQueryFromClient(connection *conn) {
         /* Append the query buffer to the pending (not applied) buffer
          * of the master. We'll use this buffer later in order to have a
          * copy of the string applied by the last command executed. */
-        // 将本次读到的数据放到pending_querybuf
+        // 主从同步: 读取出来，但是还没应用的数据
         c->pending_querybuf = sdscatlen(c->pending_querybuf,
                                         c->querybuf + qblen, nread);
     }
@@ -2197,7 +2200,10 @@ void readQueryFromClient(connection *conn) {
     // 更新缓冲区字符串的大小
     sdsIncrLen(c->querybuf, nread);
     c->lastinteraction = server.unixtime; // 最后一次交互的时间
-    if (c->flags & CLIENT_MASTER) c->read_reploff += nread; //主从同步相关
+
+    // 从库：读取偏移量
+    if (c->flags & CLIENT_MASTER) c->read_reploff += nread;
+
     server.stat_net_input_bytes += nread;
     //检查缓存长度是否大于限制
     if (sdslen(c->querybuf) > server.client_max_querybuf_len) {

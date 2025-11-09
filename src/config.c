@@ -485,19 +485,22 @@ void loadServerConfigFromString(char *config) {
         } else if ((!strcasecmp(argv[0],"client-query-buffer-limit")) && argc == 2) {
              server.client_max_querybuf_len = memtoll(argv[1],NULL);
         } else if ((!strcasecmp(argv[0],"slaveof") ||
-                    !strcasecmp(argv[0],"replicaof")) && argc == 3) {
+                    !strcasecmp(argv[0],"replicaof")) && argc == 3) {       // 从库
             slaveof_linenum = linenum;
             sdsfree(server.masterhost);
             if (!strcasecmp(argv[1], "no") && !strcasecmp(argv[2], "one")) {
                 server.masterhost = NULL;
                 continue;
             }
+            // 设置master节点
             server.masterhost = sdsnew(argv[1]);
             char *ptr;
+            // 设置端口号
             server.masterport = strtol(argv[2], &ptr, 10);
             if (server.masterport < 0 || server.masterport > 65535 || *ptr != '\0') {
                 err = "Invalid master port"; goto loaderr;
             }
+            // 设置要连接到主库
             server.repl_state = REPL_STATE_CONNECT;
         } else if (!strcasecmp(argv[0],"requirepass") && argc == 2) {
             if (strlen(argv[1]) > CONFIG_AUTHPASS_MAX_LEN) {
