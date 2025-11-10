@@ -3703,6 +3703,7 @@ void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
     // aof开关没关，并且标识传播aof
     if (server.aof_state != AOF_OFF && flags & PROPAGATE_AOF)
         feedAppendOnlyFile(cmd, dbid, argv, argc);
+    // 传播给从库
     if (flags & PROPAGATE_REPL)
         replicationFeedSlaves(server.slaves, dbid, argv, argc);
 }

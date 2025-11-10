@@ -166,24 +166,36 @@ void freeReplicationBacklog(void) {
 void feedReplicationBacklog(void *ptr, size_t len) {
     unsigned char *p = ptr;
 
+    // 更新偏移量
     server.master_repl_offset += len;
 
     /* This is a circular buffer, so write as much data we can at every
      * iteration and rewind the "idx" index if we reach the limit. */
+    // 环形缓冲区
+    // 把len个字节写入到缓冲区中
     while (len) {
+        // 积压缓冲区还剩余的空间
         size_t thislen = server.repl_backlog_size - server.repl_backlog_idx;
+        // 缓冲区往后写
         if (thislen > len) thislen = len;
         memcpy(server.repl_backlog + server.repl_backlog_idx, p, thislen);
+        // 更新缓冲区下标
         server.repl_backlog_idx += thislen;
+        // 写到末尾了，就从头写入
         if (server.repl_backlog_idx == server.repl_backlog_size)
             server.repl_backlog_idx = 0;
+        // 更新还未写入的字节
         len -= thislen;
+        // 更新字符串的位置
         p += thislen;
+        // 更新缓冲区里面的数据量
         server.repl_backlog_histlen += thislen;
     }
+    // 缓冲区写满了，更新为缓冲区的长度
     if (server.repl_backlog_histlen > server.repl_backlog_size)
         server.repl_backlog_histlen = server.repl_backlog_size;
     /* Set the offset of the first byte we have in the backlog. */
+    // 更新积压的起始偏移量
     server.repl_backlog_off = server.master_repl_offset -
                               server.repl_backlog_histlen + 1;
 }
@@ -202,6 +214,8 @@ void feedReplicationBacklogWithObject(robj *o) {
         len = sdslen(o->ptr);
         p = o->ptr;
     }
+
+    // 写入积压复制缓冲区
     feedReplicationBacklog(p, len);
 }
 
@@ -221,20 +235,24 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
      * propagate *identical* replication stream. In this way this slave can
      * advertise the same replication ID as the master (since it shares the
      * master replication history and has the same backlog and offsets). */
+    // 这是一个从库，不需要传播消息到从库
     if (server.masterhost != NULL) return;
 
     /* If there aren't slaves, and there is no backlog buffer to populate,
      * we can return ASAP. */
+    // 没有从库，并且没有积压缓冲区
     if (server.repl_backlog == NULL && listLength(slaves) == 0) return;
 
     /* We can't have slaves attached and no backlog. */
     serverAssert(!(listLength(slaves) != 0 && server.repl_backlog == NULL));
 
     /* Send SELECT command to every slave if needed. */
+    // 当前选中的数据库 与 最后一次同步选中的数据库不一致
     if (server.slaveseldb != dictid) {
         robj *selectcmd;
 
         /* For a few DBs we have pre-computed SELECT command. */
+        // 构建一个选中数据库的请求
         if (dictid >= 0 && dictid < PROTO_SHARED_SELECT_CMDS) {
             selectcmd = shared.select[dictid];
         } else {
@@ -248,22 +266,27 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
         }
 
         /* Add the SELECT command into the backlog. */
+        // 如果有积压复制缓冲区，写入
         if (server.repl_backlog) feedReplicationBacklogWithObject(selectcmd);
 
         /* Send it to slaves. */
         listRewind(slaves, &li);
         while ((ln = listNext(&li))) {
             client *slave = ln->value;
+            // 如果从库是等待开始同步，不同步
             if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) continue;
+            // 否则，添加响应到客户端待响应buffer中
             addReply(slave, selectcmd);
         }
 
         if (dictid < 0 || dictid >= PROTO_SHARED_SELECT_CMDS)
             decrRefCount(selectcmd);
     }
+    // 最后一次同步到客户端的数据库id
     server.slaveseldb = dictid;
 
     /* Write the command to the replication backlog if any. */
+    // 将此次请求写入到复制积压缓冲区中
     if (server.repl_backlog) {
         char aux[LONG_STR_SIZE + 3];
 
@@ -292,6 +315,7 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
 
     /* Write the command to every slave. */
     listRewind(slaves, &li);
+    // 将请求同步给从库(放到待响应队列中)
     while ((ln = listNext(&li))) {
         client *slave = ln->value;
 
@@ -951,7 +975,9 @@ void replconfCommand(client *c) {
              * internal only command that normal clients should never use. */
             long long offset;
 
+            // 必须是从库的请求
             if (!(c->flags & CLIENT_SLAVE)) return;
+            // 解析出偏移量
             if ((getLongLongFromObject(c->argv[j + 1], &offset) != C_OK))
                 return;
             if (offset > c->repl_ack_off)
@@ -967,7 +993,7 @@ void replconfCommand(client *c) {
              * quick check first (instead of waiting for the next ACK. */
             if (server.rdb_child_pid != -1 && c->replstate == SLAVE_STATE_WAIT_BGSAVE_END)
                 checkChildrenDone();
-            if (c->repl_put_online_on_ack && c->replstate == SLAVE_STATE_ONLINE)
+            if (c->repl_put_online_on_ack && c->replstate == SLAVE_STATE_ONLINE)        // 设置从库上线
                 putSlaveOnline(c);
             /* Note: this command does not reply anything! */
             return;
@@ -1568,7 +1594,8 @@ void readSyncBulkPayload(connection *conn) {
 
     /* If repl_transfer_size == -1 we still have to read the bulk length
      * from the master reply. */
-    if (server.repl_transfer_size == -1) {          // 刚开始同步
+    // 刚开始同步，解析头部
+    if (server.repl_transfer_size == -1) {
         if (connSyncReadLine(conn, buf, 1024, server.repl_syncio_timeout * 1000) == -1) {
             serverLog(LL_WARNING,
                       "I/O error reading bulk count from MASTER: %s",
@@ -1633,7 +1660,8 @@ void readSyncBulkPayload(connection *conn) {
         return;
     }
 
-    if (!use_diskless_load) {       // 从库使用有盘同步
+    // 从库使用有盘同步，把整个数据写到磁盘，之后才进行后面的流程
+    if (!use_diskless_load) {
         /* Read the data from the socket, store it to a file and search
          * for the EOF. */
         if (usemark) {      // 主库使用的是无盘同步
@@ -1835,7 +1863,7 @@ void readSyncBulkPayload(connection *conn) {
         rioFreeConn(&rdb, NULL);
         connNonBlock(conn);
         connRecvTimeout(conn, 0);
-    } else {
+    } else {        // 使用有盘同步
         /* Ensure background save doesn't overwrite synced data */
         // 如果有rdb线程，杀掉
         if (server.rdb_child_pid != -1) {
@@ -1873,7 +1901,7 @@ void readSyncBulkPayload(connection *conn) {
             return;
         }
         /* Close old rdb asynchronously. */
-        // 后台线程关闭旧文件（触发页回写，可能会慢）
+        // 后台线程关闭旧文件（触发页回写的话可能会慢）
         if (old_rdb_fd != -1) bioCreateBackgroundJob(BIO_CLOSE_FILE, (void *) (long) old_rdb_fd,NULL,NULL);
 
         // 通过文件加载整个rdb文件
@@ -2114,6 +2142,7 @@ int slaveTryPartialResynchronization(connection *conn, int read_reply) {
     }
 
     /* Reading half */
+    // 读取主库的响应值
     reply = sendSynchronousCommand(SYNC_CMD_READ, conn,NULL);
     if (sdslen(reply) == 0) {
         /* The master may send empty newlines after it receives PSYNC
@@ -2122,9 +2151,10 @@ int slaveTryPartialResynchronization(connection *conn, int read_reply) {
         return PSYNC_WAIT_REPLY;
     }
 
+    // 注销读事件
     connSetReadHandler(conn, NULL);
 
-    // 全同步
+    // 全同步 +FULLRESYNC <runid> <offset>
     if (!strncmp(reply, "+FULLRESYNC", 11)) {
         char *replid = NULL, *offset = NULL;
 
@@ -2132,10 +2162,13 @@ int slaveTryPartialResynchronization(connection *conn, int read_reply) {
          * and the replication offset. */
         replid = strchr(reply, ' ');
         if (replid) {
+            // 拿到runid的值
             replid++;
             offset = strchr(replid, ' ');
+            // 拿到offset的值
             if (offset) offset++;
         }
+        // 校验返回的格式是否正确
         if (!replid || !offset || (offset - replid - 1) != CONFIG_RUN_ID_SIZE) {
             serverLog(LL_WARNING,
                       "Master replied with wrong +FULLRESYNC syntax.");
@@ -2155,6 +2188,7 @@ int slaveTryPartialResynchronization(connection *conn, int read_reply) {
                       server.master_initial_offset);
         }
         /* We are going to full resync, discard the cached master structure. */
+        // 要做全量同步，去掉增量同步相关的缓存
         replicationDiscardCachedMaster();
         sdsfree(reply);
         return PSYNC_FULLRESYNC;
@@ -2492,7 +2526,8 @@ void syncWithMaster(connection *conn) {
      * as well, if we have any sub-slaves. The master may transfer us an
      * entirely different data set and we have no way to incrementally feed
      * our slaves after that. */
-    // 全量同步
+    // 级联同步的情况，从库作为另一个从库的主库
+    // 重置当前从库的从库，也重新进行全量同步
     disconnectSlaves(); /* Force our slaves to resync with us as well. */
     freeReplicationBacklog(); /* Don't allow our chained slaves to PSYNC. */
 
@@ -2507,6 +2542,9 @@ void syncWithMaster(connection *conn) {
             goto error;
         }
     }
+
+
+    // 开始进行全量同步
 
     /* Prepare a suitable temp file for bulk transfer */
     // 不使用无盘加载
@@ -2541,10 +2579,13 @@ void syncWithMaster(connection *conn) {
         goto error;
     }
 
+    // 设置状态
     server.repl_state = REPL_STATE_TRANSFER;
+    // 重置接下来要用到的数据
     server.repl_transfer_size = -1;
     server.repl_transfer_read = 0;
     server.repl_transfer_last_fsync_off = 0;
+    // 记录最后一次读的时间
     server.repl_transfer_lastio = server.unixtime;
     return;
 
@@ -3335,6 +3376,7 @@ void replicationCron(void) {
     /* Send ACK to master from time to time.
      * Note that we do not send periodic acks to masters that don't
      * support PSYNC and replication offsets. */
+    // 全量同步完之后，server.master会被设置
     if (server.masterhost && server.master &&
         !(server.master->flags & CLIENT_PRE_PSYNC))
         replicationSendAck();

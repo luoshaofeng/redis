@@ -242,10 +242,12 @@ extern int configOOMScoreAdjValuesDefaults[CONFIG_OOM_COUNT];
 #define CLIENT_CLOSE_ASAP (1<<10)/* Close this client ASAP */
 #define CLIENT_UNIX_SOCKET (1<<11) /* Client connected via Unix domain socket */
 #define CLIENT_DIRTY_EXEC (1<<12)  /* EXEC will fail for errors while queueing */
+// 标识master client必须回复，不然slave发不出去
 #define CLIENT_MASTER_FORCE_REPLY (1<<13)  /* Queue replies even if is master */
 #define CLIENT_FORCE_AOF (1<<14)   /* Force AOF propagation of current cmd. */
 #define CLIENT_FORCE_REPL (1<<15)  /* Force replication of current cmd. */
 // 主从同步客户端，不理解PSYNC
+// master不具备PSYNC的能力
 #define CLIENT_PRE_PSYNC (1<<16)   /* Instance don't understand PSYNC. */
 #define CLIENT_READONLY (1<<17)    /* Cluster client is in read-only state. */
 #define CLIENT_PUBSUB (1<<18)      /* Client is in Pub/Sub mode. */
@@ -894,7 +896,8 @@ typedef struct client {
     size_t sentlen; /* Amount of bytes already sent in the current
                                buffer or object being sent. */
     time_t ctime; /* Client creation time. */
-    time_t lastinteraction; /* 最后的交互时间 Time of the last interaction, used for timeout */
+    // 最后的交互时间
+    time_t lastinteraction; /* Time of the last interaction, used for timeout */
     time_t obuf_soft_limit_reached_time;
     uint64_t flags; /* Client flags: CLIENT_* macros. */
     int authenticated; /* Needed when the default user requires auth. */
@@ -902,6 +905,7 @@ typedef struct client {
     int replstate; /* Replication state if this is a slave. */
     // socket方式全量同步完成后会设置为1
     // 文件方式全量同步完没有设置为1
+    // 设置为1，延迟发送增量数据，等待ack
     int repl_put_online_on_ack; /* Install slave write handler on first ACK. */
     int repldbfd; /* Replication DB file descriptor. */
     // 复制从库 rdb偏移量
@@ -916,6 +920,7 @@ typedef struct client {
     long long read_reploff; /* Read replication offset if this is a master. */
     // 复制偏移量（实际已经应用：入库）
     long long reploff; /* Applied replication offset if this is a master. */
+    // 记录从库的ack偏移量
     long long repl_ack_off; /* Replication ack offset, if this is a slave. */
     // 主从同步最后一次ack的时间
     long long repl_ack_time; /* Replication ack time, if this is a slave. */
@@ -1512,12 +1517,14 @@ struct redisServer {
     char *repl_backlog; /* Replication backlog for partial syncs */
     // 积压复制缓冲区的字节大小，默认1mb
     long long repl_backlog_size; /* Backlog circular buffer size */
-    // 缓冲区的数据长度
+    // 缓冲区里面实际保存的数据长度
     long long repl_backlog_histlen; /* Backlog actual data length */
+    // 缓冲区当前写入的位置（后面的是下次待写入的位置）
     long long repl_backlog_idx; /* Backlog circular buffer current offset,
                                        that is the next byte will'll write to.*/
     // master的同步偏移量
     // 初始化为：server.master_repl_offset + 1;
+    // 主库：积压缓冲区的起始偏移量（后面的是积压的数据）
     long long repl_backlog_off; /* Replication "master offset" of first
                                        byte in the replication backlog buffer.*/
     // 任务积压，但是没有从库的时间限制
@@ -1547,11 +1554,12 @@ struct redisServer {
     // 同步超时时间
     int repl_timeout; /* Timeout after N seconds of master idle */
     // 从库的master连接 master向从库发送数据
+    // 从库全量同步完之后，会设置这个属性值，然后会定时发送ack
     client *master; /*  Client that is master for this slave */
     client *cached_master; /* Cached master to be reused for PSYNC. */
     int repl_syncio_timeout; /* Timeout for synchronous I/O calls */
     int repl_state; /* Replication status if the instance is a slave */
-    // 同步期间rdb文件的大小
+    // 同步期间rdb文件的大小(socket传输的话会被置为0)
     off_t repl_transfer_size; /* Size of RDB to read from master during sync. */
     // 已同步的rdb字节数
     off_t repl_transfer_read; /* Amount of RDB read from master during sync. */
@@ -1579,6 +1587,7 @@ struct redisServer {
      * the server->master client structure. */
     // master的runid
     char master_replid[CONFIG_RUN_ID_SIZE + 1]; /* Master PSYNC runid. */
+    // master的初始同步偏移量
     long long master_initial_offset; /* Master PSYNC offset. */
     // 全量同步时要清空数据库，这里配置同步清空，还是惰性清空
     int repl_slave_lazy_flush; /* Lazy FLUSHALL before loading DB? */

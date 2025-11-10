@@ -218,7 +218,7 @@ void clientInstallWriteHandler(client *c) {
      * writes at this stage. */
     if (!(c->flags & CLIENT_PENDING_WRITE) &&
         (c->replstate == REPL_STATE_NONE ||
-         (c->replstate == SLAVE_STATE_ONLINE && !c->repl_put_online_on_ack))) {
+         (c->replstate == SLAVE_STATE_ONLINE && !c->repl_put_online_on_ack))) {     // 状态为SLAVE_STATE_WAIT_BGSAVE_END时，不会添加到响应队列去，也就不会去响应客户端
         /* Here instead of installing the write handler, we just flag the
          * client and put it into a list of clients that have something
          * to write to the socket. This way before re-entering the event
@@ -283,7 +283,7 @@ int prepareClientToWrite(client *c) {
      */
     //客户端缓冲区没有待处理数据写入，客户端也不是准备读
     if (!clientHasPendingReplies(c) && !(c->flags & CLIENT_PENDING_READ))
-        clientInstallWriteHandler(c);
+        clientInstallWriteHandler(c);       // slave状态为SLAVE_STATE_WAIT_BGSAVE_END时，这里并不会添加到响应队列里面去，也就不会去响应客户端，会一直积攒着增量命令
 
     /* Authorize the caller to queue in the output buffer of this client. */
     return C_OK;
