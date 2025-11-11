@@ -1507,7 +1507,7 @@ struct redisServer {
     char replid[CONFIG_RUN_ID_SIZE + 1]; /* My current replication ID. */
     // 从库也能作为主库进行主从同步，从库用的
     char replid2[CONFIG_RUN_ID_SIZE + 1]; /* replid inherited from master*/
-    // 主节点的可复制偏移量
+    // 主节点的可复制偏移量（累计偏移量）
     long long master_repl_offset; /* My current replication offset */
     long long second_replid_offset; /* Accept offsets up to this for replid2. */
     // 在主从同步中最后选中的数据库
@@ -1524,7 +1524,7 @@ struct redisServer {
                                        that is the next byte will'll write to.*/
     // master的同步偏移量
     // 初始化为：server.master_repl_offset + 1;
-    // 主库：积压缓冲区的起始偏移量（后面的是积压的数据）
+    // 主库：积压缓冲区的起始偏移量（后面的是积压的数据）(累积偏移量)
     long long repl_backlog_off; /* Replication "master offset" of first
                                        byte in the replication backlog buffer.*/
     // 任务积压，但是没有从库的时间限制
@@ -1556,6 +1556,7 @@ struct redisServer {
     // 从库的master连接 master向从库发送数据
     // 从库全量同步完之后，会设置这个属性值，然后会定时发送ack
     client *master; /*  Client that is master for this slave */
+    // 缓冲的master，与master一样的。加载rdb时设置
     client *cached_master; /* Cached master to be reused for PSYNC. */
     int repl_syncio_timeout; /* Timeout for synchronous I/O calls */
     int repl_state; /* Replication status if the instance is a slave */

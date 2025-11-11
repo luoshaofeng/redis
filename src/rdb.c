@@ -2289,15 +2289,15 @@ int rdbLoadRio(rio *rdb, int rdbflags, rdbSaveInfo *rsi) {
                 serverLog(LL_NOTICE,"RDB '%s': %s",
                     (char*)auxkey->ptr,
                     (char*)auxval->ptr);
-            } else if (!strcasecmp(auxkey->ptr,"repl-stream-db")) {
-                if (rsi) rsi->repl_stream_db = atoi(auxval->ptr);
+            } else if (!strcasecmp(auxkey->ptr,"repl-stream-db")) { // 主从同步相关
+                if (rsi) rsi->repl_stream_db = atoi(auxval->ptr);       // 解析选中的数据库
             } else if (!strcasecmp(auxkey->ptr,"repl-id")) {
-                if (rsi && sdslen(auxval->ptr) == CONFIG_RUN_ID_SIZE) {
-                    memcpy(rsi->repl_id,auxval->ptr,CONFIG_RUN_ID_SIZE+1);
+                if (rsi && sdslen(auxval->ptr) == CONFIG_RUN_ID_SIZE) {     // 主从同步相关
+                    memcpy(rsi->repl_id,auxval->ptr,CONFIG_RUN_ID_SIZE+1);      // 解析master runid
                     rsi->repl_id_is_set = 1;
                 }
-            } else if (!strcasecmp(auxkey->ptr,"repl-offset")) {
-                if (rsi) rsi->repl_offset = strtoll(auxval->ptr,NULL,10);
+            } else if (!strcasecmp(auxkey->ptr,"repl-offset")) {            // 主从同步相关
+                if (rsi) rsi->repl_offset = strtoll(auxval->ptr,NULL,10);       // 解析同步偏移量
             } else if (!strcasecmp(auxkey->ptr,"lua")) {
                 /* Load the script back in memory. */
                 if (luaCreateFunction(NULL,server.lua,auxval) == NULL) {

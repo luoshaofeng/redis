@@ -465,18 +465,21 @@ long long addReplyReplicationBacklog(client *c, long long offset) {
 
     /* Point j to the oldest byte, that is actually our
      * server.repl_backlog_off byte. */
+    // 计算缓冲区的起始偏移量
     j = (server.repl_backlog_idx +
          (server.repl_backlog_size - server.repl_backlog_histlen)) %
         server.repl_backlog_size;
     serverLog(LL_DEBUG, "[PSYNC] Index of first byte: %lld", j);
 
     /* Discard the amount of data to seek to the specified 'offset'. */
+    // 跳过skip个字节
     j = (j + skip) % server.repl_backlog_size;
 
     /* Feed slave with data. Since it is a circular buffer we have to
      * split the reply in two parts if we are cross-boundary. */
     len = server.repl_backlog_histlen - skip;
     serverLog(LL_DEBUG, "[PSYNC] Reply total length: %lld", len);
+    // 把积压复制区的数据写到响应中
     while (len) {
         long long thislen =
                 ((server.repl_backlog_size - j) < len) ? (server.repl_backlog_size - j) : len;
@@ -546,6 +549,7 @@ int replicationSetupSlaveForFullResync(client *slave, long long offset) {
  *
  * On success return C_OK, otherwise C_ERR is returned and we proceed
  * with the usual full resync. */
+// 增量同步，直接上线，把积压复制缓冲区的数据一次性写入到client中
 int masterTryPartialResynchronization(client *c) {
     long long psync_offset, psync_len;
     char *master_replid = c->argv[1]->ptr;      // runid
@@ -638,6 +642,7 @@ int masterTryPartialResynchronization(client *c) {
      * to -1 to force the master to emit SELECT, since the slave already
      * has this state from the previous connection with the master. */
 
+    // 更新从库数量
     refreshGoodSlavesCount();
 
     /* Fire the replica change modules event. */

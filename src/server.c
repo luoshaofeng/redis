@@ -5655,7 +5655,7 @@ void loadDataFromDisk(void) {
                       (float) (ustime() - start) / 1000000);
 
             /* Restore the replication ID / offset from the RDB file. */
-            // 主从同步相关
+            // 主从同步相关：当前是从库，并且有同步信息
             if ((server.masterhost ||
                  (server.cluster_enabled &&
                   nodeIsSlave(server.cluster->myself))) &&
@@ -5665,11 +5665,12 @@ void loadDataFromDisk(void) {
                  * of -1 inside the RDB file in a wrong way, see more
                  * information in function rdbPopulateSaveInfo. */
                 rsi.repl_stream_db != -1) {
-                memcpy(server.replid, rsi.repl_id, sizeof(server.replid));
-                server.master_repl_offset = rsi.repl_offset;
+                memcpy(server.replid, rsi.repl_id, sizeof(server.replid));      // 设置主库的runid
+                server.master_repl_offset = rsi.repl_offset;                        // 设置偏移量
                 /* If we are a slave, create a cached master from this
                  * information, in order to allow partial resynchronizations
                  * with masters. */
+                // 记载同步信息
                 replicationCacheMasterUsingMyself();
                 selectDb(server.cached_master, rsi.repl_stream_db);
             }
