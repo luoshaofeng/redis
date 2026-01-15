@@ -596,7 +596,7 @@ void loadServerConfigFromString(char *config) {
             }
         } else if (!strcasecmp(argv[0],"loadmodule") && argc >= 2) {
             queueLoadModule(argv[1],&argv[2],argc-2);
-        } else if (!strcasecmp(argv[0],"sentinel")) {
+        } else if (!strcasecmp(argv[0],"sentinel")) {       // Sentinel配置
             /* argc == 1 is handled by main() as we need to enter the sentinel
              * mode ASAP. */
             if (argc != 1) {
@@ -1697,6 +1697,7 @@ int rewriteConfig(char *path, int force_all) {
     rewriteConfigOOMScoreAdjValuesOption(state);
 
     /* Rewrite Sentinel config if in Sentinel mode. */
+    // 重写Sentinel配置，保存Sentinel实例的一些信息
     if (server.sentinel_mode) rewriteConfigSentinelOption(state);
 
     /* Step 3: remove all the orphaned lines in the old file, that is, lines

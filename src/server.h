@@ -54,7 +54,9 @@
 #include <systemd/sd-daemon.h>
 #endif
 
+// 毫秒时间
 typedef long long mstime_t; /* millisecond time type. */
+// 微秒时间
 typedef long long ustime_t; /* microsecond time type. */
 
 #include "ae.h"      /* Event driven programming library */
@@ -245,11 +247,13 @@ extern int configOOMScoreAdjValuesDefaults[CONFIG_OOM_COUNT];
 // 标识master client必须回复，不然slave发不出去
 #define CLIENT_MASTER_FORCE_REPLY (1<<13)  /* Queue replies even if is master */
 #define CLIENT_FORCE_AOF (1<<14)   /* Force AOF propagation of current cmd. */
+// 执行了publish会被设置
 #define CLIENT_FORCE_REPL (1<<15)  /* Force replication of current cmd. */
 // 主从同步客户端，不理解PSYNC
 // master不具备PSYNC的能力
 #define CLIENT_PRE_PSYNC (1<<16)   /* Instance don't understand PSYNC. */
 #define CLIENT_READONLY (1<<17)    /* Cluster client is in read-only state. */
+// 标识这是一个pub/sub客户端
 #define CLIENT_PUBSUB (1<<18)      /* Client is in Pub/Sub mode. */
 #define CLIENT_PREVENT_AOF_PROP (1<<19)  /* Don't propagate to AOF. */
 #define CLIENT_PREVENT_REPL_PROP (1<<20)  /* Don't propagate to slaves. */
@@ -491,6 +495,7 @@ extern int configOOMScoreAdjValuesDefaults[CONFIG_OOM_COUNT];
 
 /* Get the first bind addr or NULL */
 // 客户端绑定的ip
+// 本地多网卡，可以指定网卡（作为客户端发起连接时）
 #define NET_FIRST_BIND_ADDR (server.bindaddr_count ? server.bindaddr[0] : NULL)
 
 /* Using the following macro you can run code inside serverCron() with the
@@ -944,7 +949,9 @@ typedef struct client {
     blockingState bpop; /* blocking state */
     long long woff; /*  Last write global replication offset. */
     list *watched_keys; /* Keys WATCHED for MULTI/EXEC CAS */
+    // 客户端的channels
     dict *pubsub_channels; /* channels a client is interested in (SUBSCRIBE) */
+    // 订阅的patterns
     list *pubsub_patterns; /* patterns a client is interested in (SUBSCRIBE) */
     sds peerid; /* Cached peer ID. */
     listNode *client_list_node; /* list node in client list */
@@ -1267,6 +1274,7 @@ struct redisServer {
     char neterr[ANET_ERR_LEN]; /* Error buffer for anet.c */
     dict *migrate_cached_sockets; /* MIGRATE cached sockets */
     _Atomic uint64_t next_client_id; /* Next client unique ID. Incremental. */
+    // 不接受外部连接
     int protected_mode; /* Don't accept external connections. */
     int gopher_enabled; /* If true the server will reply to gopher
                                    queries. Will still serve RESP2 queries. */
@@ -1512,6 +1520,7 @@ struct redisServer {
     long long second_replid_offset; /* Accept offsets up to this for replid2. */
     // 在主从同步中最后选中的数据库
     int slaveseldb; /* Last SELECTed DB in replication output */
+    // 每N秒ping从库
     int repl_ping_slave_period; /* Master pings the slave every N seconds */
     // 用于部分同步（复制积压）
     char *repl_backlog; /* Replication backlog for partial syncs */
@@ -1652,9 +1661,12 @@ struct redisServer {
     // 微妙级时间戳
     ustime_t ustime; /* 'unixtime' in microseconds. */
     /* Pubsub */
+    // channel到客户端列表的映射
     dict *pubsub_channels; /* Map channels to list of subscribed clients */
     // freePubsubPattern 和 listMatchPubsubPattern
+    // patterns订阅列表
     list *pubsub_patterns; /* A list of pubsub_patterns */
+    // patterns -> client list
     dict *pubsub_patterns_dict; /* A dict of pubsub_patterns */
     int notify_keyspace_events; /* Events to propagate via Pub/Sub. This is an
                                    xor of NOTIFY_... flags. */

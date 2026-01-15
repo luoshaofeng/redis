@@ -2064,6 +2064,7 @@ void clientsCron(void) {
      * per call. Since normally (if there are no big latency events) this
      * function is called server.hz times per second, in the average case we
      * process all the clients in 1 second. */
+    // 处理一部分客户端
     int numclients = listLength(server.clients);
     int iterations = numclients / server.hz;
     mstime_t now = mstime();
@@ -2081,12 +2082,14 @@ void clientsCron(void) {
         /* Rotate the list, take the current head, process.
          * This way if the client must be removed from the list it's the
          * first element and we don't incur into O(N) computation. */
+        // 末尾放到头部
         listRotateTailToHead(server.clients);
         head = listFirst(server.clients);
         c = listNodeValue(head);
         /* The following functions do different service checks on the client.
          * The protocol is that they return non-zero if the client was
          * terminated. */
+        // 检查client是否超时
         if (clientsCronHandleTimeout(c, now)) continue;
         if (clientsCronResizeQueryBuffer(c)) continue;
         if (clientsCronTrackExpansiveClients(c)) continue;
@@ -2372,6 +2375,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     }
 
     /* We need to do a few operations on clients asynchronously. */
+    // 处理客户端连接
     clientsCron();
 
     /* Handle background operations on Redis databases. */
@@ -2461,6 +2465,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     }
 
     /* Run the Sentinel timer if we are in sentinel mode. */
+    // 运行Sentinel定时器
     if (server.sentinel_mode) sentinelTimer();
 
     /* Cleanup expired MIGRATE cached sockets. */
@@ -5854,6 +5859,7 @@ int main(int argc, char **argv) {
      * data structures with master nodes to monitor. */
     if (server.sentinel_mode) {
         initSentinelConfig();
+        // 初始化sentinel，注册sentinel命令
         initSentinel();
     }
 
@@ -6040,6 +6046,7 @@ int main(int argc, char **argv) {
         //sentinel模式
         //初始化server
         InitServerLast();
+        // 初始化Sentinel信息，覆盖配置文件
         sentinelIsRunning();
         if (server.supervised_mode == SUPERVISED_SYSTEMD) {
             redisCommunicateSystemd("STATUS=Ready to accept connections\n");

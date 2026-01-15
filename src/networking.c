@@ -1282,6 +1282,7 @@ void freeClient(client *c) {
      *
      * Note that before doing this we make sure that the client is not in
      * some unexpected state, by checking its flags. */
+    // 主从同步：主库的连接
     if (server.master && c->flags & CLIENT_MASTER) {
         serverLog(LL_WARNING, "Connection with master lost.");
         if (!(c->flags & (CLIENT_PROTOCOL_ERROR | CLIENT_BLOCKED))) {
@@ -1292,12 +1293,14 @@ void freeClient(client *c) {
     }
 
     /* Log link disconnection with slave */
+    // 主从同步：从库的连接
     if (getClientType(c) == CLIENT_TYPE_SLAVE) {
         serverLog(LL_WARNING, "Connection with replica %s lost.",
                   replicationGetSlaveName(c));
     }
 
     /* Free the query buffer */
+    // 释放缓冲区的数据
     sdsfree(c->querybuf);
     sdsfree(c->pending_querybuf);
     c->querybuf = NULL;
@@ -1311,12 +1314,16 @@ void freeClient(client *c) {
     listRelease(c->watched_keys);
 
     /* Unsubscribe from all the pubsub channels */
+    // 取消client订阅的所有channel
     pubsubUnsubscribeAllChannels(c, 0);
+    // 去掉client订阅的所有patterns channel
     pubsubUnsubscribeAllPatterns(c, 0);
+    // 释放客户端的相关数据
     dictRelease(c->pubsub_channels);
     listRelease(c->pubsub_patterns);
 
     /* Free data structures. */
+    // 释放客户端的响应属性
     listRelease(c->reply);
     freeClientArgv(c);
 

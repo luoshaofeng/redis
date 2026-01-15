@@ -170,11 +170,14 @@ int pubsubSubscribeChannel(client *c, robj *channel) {
     int retval = 0;
 
     /* Add the channel to the client -> channels hash table */
+    // 添加到客户端的channel
     if (dictAdd(c->pubsub_channels,channel,NULL) == DICT_OK) {
         retval = 1;
         incrRefCount(channel);
         /* Add the client to the channel -> list of clients hash table */
+        // 找server的channel
         de = dictFind(server.pubsub_channels,channel);
+        // 将这个client添加到server的channel中
         if (de == NULL) {
             clients = listCreate();
             dictAdd(server.pubsub_channels,channel,clients);
@@ -185,6 +188,7 @@ int pubsubSubscribeChannel(client *c, robj *channel) {
         listAddNodeTail(clients,c);
     }
     /* Notify the client */
+    // 返回响应
     addReplyPubsubSubscribed(c,channel);
     return retval;
 }
@@ -203,12 +207,15 @@ int pubsubUnsubscribeChannel(client *c, robj *channel, int notify) {
     if (dictDelete(c->pubsub_channels,channel) == DICT_OK) {
         retval = 1;
         /* Remove the client from the channel -> clients list hash table */
+        // 找到服务端维护的channel
         de = dictFind(server.pubsub_channels,channel);
         serverAssertWithInfo(c,NULL,de != NULL);
         clients = dictGetVal(de);
         ln = listSearchKey(clients,c);
         serverAssertWithInfo(c,NULL,ln != NULL);
+        // 从服务的clients列表中去掉
         listDelNode(clients,ln);
+        // 如果没有了，那么整个channel删掉
         if (listLength(clients) == 0) {
             /* Free the list and associated hash entry at all if this was
              * the latest client, so that it will be possible to abuse
@@ -228,16 +235,22 @@ int pubsubSubscribePattern(client *c, robj *pattern) {
     list *clients;
     int retval = 0;
 
+    // 客户端是否订阅过这个pattern
     if (listSearchKey(c->pubsub_patterns,pattern) == NULL) {
         retval = 1;
         pubsubPattern *pat;
+        // 订阅这个pattern
         listAddNodeTail(c->pubsub_patterns,pattern);
         incrRefCount(pattern);
         pat = zmalloc(sizeof(*pat));
+        // 保存这个pattern
         pat->pattern = getDecodedObject(pattern);
+        // 保存这个客户端
         pat->client = c;
+        // 保存服务器上所有的订阅
         listAddNodeTail(server.pubsub_patterns,pat);
         /* Add the client to the pattern -> list of clients hash table */
+        // 保存订阅该pattern的所有客户端
         de = dictFind(server.pubsub_patterns_dict,pattern);
         if (de == NULL) {
             clients = listCreate();
@@ -265,12 +278,15 @@ int pubsubUnsubscribePattern(client *c, robj *pattern, int notify) {
     incrRefCount(pattern); /* Protect the object. May be the same we remove */
     if ((ln = listSearchKey(c->pubsub_patterns,pattern)) != NULL) {
         retval = 1;
+        // 从客户端中去掉patterns
         listDelNode(c->pubsub_patterns,ln);
         pat.client = c;
         pat.pattern = pattern;
+        // 从服务端中去掉
         ln = listSearchKey(server.pubsub_patterns,&pat);
         listDelNode(server.pubsub_patterns,ln);
         /* Remove the client from the pattern -> clients list hash table */
+        // 从服务端的字典中去掉
         de = dictFind(server.pubsub_patterns_dict,pattern);
         serverAssertWithInfo(c,NULL,de != NULL);
         clients = dictGetVal(de);
@@ -292,6 +308,7 @@ int pubsubUnsubscribePattern(client *c, robj *pattern, int notify) {
 /* Unsubscribe from all the channels. Return the number of channels the
  * client was subscribed to. */
 int pubsubUnsubscribeAllChannels(client *c, int notify) {
+    // 取消掉客户端订阅的所有channel
     dictIterator *di = dictGetSafeIterator(c->pubsub_channels);
     dictEntry *de;
     int count = 0;
@@ -335,6 +352,7 @@ int pubsubPublishMessage(robj *channel, robj *message) {
     /* Send to clients listening for that channel */
     de = dictFind(server.pubsub_channels,channel);
     if (de) {
+        // 拿到客户端列表
         list *list = dictGetVal(de);
         listNode *ln;
         listIter li;
@@ -342,6 +360,7 @@ int pubsubPublishMessage(robj *channel, robj *message) {
         listRewind(list,&li);
         while ((ln = listNext(&li)) != NULL) {
             client *c = ln->value;
+            // 响应数据
             addReplyPubsubMessage(c,channel,message);
             receivers++;
         }
@@ -353,6 +372,7 @@ int pubsubPublishMessage(robj *channel, robj *message) {
         while((de = dictNext(di)) != NULL) {
             robj *pattern = dictGetKey(de);
             list *clients = dictGetVal(de);
+            // 和patterns匹配了
             if (!stringmatchlen((char*)pattern->ptr,
                                 sdslen(pattern->ptr),
                                 (char*)channel->ptr,
@@ -420,7 +440,7 @@ void publishCommand(client *c) {
     if (server.cluster_enabled)
         clusterPropagatePublish(c->argv[1],c->argv[2]);
     else
-        forceCommandPropagation(c,PROPAGATE_REPL);
+        forceCommandPropagation(c,PROPAGATE_REPL);      // 强制将这个命令传播到从库
     addReplyLongLong(c,receivers);
 }
 

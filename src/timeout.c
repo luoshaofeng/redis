@@ -61,10 +61,10 @@ int clientsCronHandleTimeout(client *c, mstime_t now_ms) {
         !(c->flags & CLIENT_MASTER) &&  /* No timeout for masters */
         !(c->flags & CLIENT_BLOCKED) && /* No timeout for BLPOP */
         !(c->flags & CLIENT_PUBSUB) &&  /* No timeout for Pub/Sub clients */
-        (now - c->lastinteraction > server.maxidletime))
+        (now - c->lastinteraction > server.maxidletime))        // 超出最大空闲时间
     {
         serverLog(LL_VERBOSE,"Closing idle client");
-        freeClient(c);
+        freeClient(c);      // 关掉client
         return 1;
     } else if (c->flags & CLIENT_BLOCKED) {
         /* Cluster: handle unblock & redirect of clients blocked
