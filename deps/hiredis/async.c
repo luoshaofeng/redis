@@ -721,10 +721,10 @@ static int __redisAsyncCommand(redisAsyncContext *ac, redisCallbackFn *fn, void 
              * received and passed to the callback. */
             __redisPushCallback(&ac->sub.invalid,&cb);
         else
-            __redisPushCallback(&ac->replies,&cb);
+            __redisPushCallback(&ac->replies,&cb);      // 回调函数添加到回复队列
     }
 
-
+    // 将命令写入缓冲区
     __redisAppendCommand(c,cmd,len);
 
     /* Always schedule a write when the write buffer is non-empty */

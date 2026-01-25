@@ -109,6 +109,7 @@ typedef struct redisAsyncContext {
     redisConnectCallback *onConnect;
 
     /* Regular command callbacks */
+    // 普通命令的回调函数
     redisCallbackList replies;
 
     /* Address used for connect() */
