@@ -101,6 +101,7 @@ typedef struct redisReader {
     int ridx; /* Index of current read task */
     void *reply; /* Temporary reply pointer */
 
+    // 初始化 defaultFunctions
     redisReplyObjectFunctions *fn;
     void *privdata;
 } redisReader;

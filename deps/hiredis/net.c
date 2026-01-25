@@ -215,6 +215,7 @@ static int redisSetTcpNoDelay(redisContext *c) {
 
 #define __MAX_MSEC (((LONG_MAX) - 999) / 1000)
 
+// 取出redisContext的timeout值
 static int redisContextTimeoutMsec(redisContext *c, long *result)
 {
     const struct timeval *timeout = c->timeout;
@@ -271,6 +272,7 @@ static int redisContextWaitReady(redisContext *c, long msec) {
     return REDIS_ERR;
 }
 
+// 发起连接
 int redisCheckConnectDone(redisContext *c, int *completed) {
     int rc = connect(c->fd, (const struct sockaddr *)c->saddr, c->addrlen);
     if (rc == 0) {
@@ -278,7 +280,7 @@ int redisCheckConnectDone(redisContext *c, int *completed) {
         return REDIS_OK;
     }
     switch (errno) {
-    case EISCONN:
+    case EISCONN:           // 已经连接了，重复请求
         *completed = 1;
         return REDIS_OK;
     case EALREADY:
@@ -373,6 +375,7 @@ static int _redisContextConnectTcp(redisContext *c, const char *addr, int port,
         c->timeout = NULL;
     }
 
+    // 读取context的timeout到timeout_msec
     if (redisContextTimeoutMsec(c, &timeout_msec) != REDIS_OK) {
         __redisSetError(c, REDIS_ERR_IO, "Invalid timeout specified");
         goto error;
@@ -405,10 +408,12 @@ static int _redisContextConnectTcp(redisContext *c, const char *addr, int port,
     }
     for (p = servinfo; p != NULL; p = p->ai_next) {
 addrretry:
+        // 创建socket
         if ((s = socket(p->ai_family,p->ai_socktype,p->ai_protocol)) == REDIS_INVALID_FD)
             continue;
 
         c->fd = s;
+        // 设置非阻塞
         if (redisSetBlocking(c,0) != REDIS_OK)
             goto error;
         if (c->tcp.source_addr) {
@@ -431,6 +436,7 @@ addrretry:
             }
 
             for (b = bservinfo; b != NULL; b = b->ai_next) {
+                // 绑定地址
                 if (bind(s,b->ai_addr,b->ai_addrlen) != -1) {
                     bound = 1;
                     break;
@@ -451,11 +457,12 @@ addrretry:
         memcpy(c->saddr, p->ai_addr, p->ai_addrlen);
         c->addrlen = p->ai_addrlen;
 
+        // 发起连接
         if (connect(s,p->ai_addr,p->ai_addrlen) == -1) {
             if (errno == EHOSTUNREACH) {
                 redisNetClose(c);
                 continue;
-            } else if (errno == EINPROGRESS) {
+            } else if (errno == EINPROGRESS) {      // 连接未能成功建立（非阻塞情况下）
                 if (blocking) {
                     goto wait_for_ready;
                 }
@@ -478,9 +485,11 @@ addrretry:
         }
         if (blocking && redisSetBlocking(c,1) != REDIS_OK)
             goto error;
+        // 设置不粘包
         if (redisSetTcpNoDelay(c) != REDIS_OK)
             goto error;
 
+        // 设置当前已执行connect操作，不代表已经connect
         c->flags |= REDIS_CONNECTED;
         rv = REDIS_OK;
         goto end;
@@ -502,6 +511,7 @@ end:
     return rv;  // Need to return REDIS_OK if alright
 }
 
+// 发起tcp建立连接
 int redisContextConnectTcp(redisContext *c, const char *addr, int port,
                            const struct timeval *timeout) {
     return _redisContextConnectTcp(c, addr, port, timeout, NULL);
@@ -519,9 +529,9 @@ int redisContextConnectUnix(redisContext *c, const char *path, const struct time
     struct sockaddr_un *sa;
     long timeout_msec = -1;
 
-    if (redisCreateSocket(c,AF_UNIX) < 0)
+    if (redisCreateSocket(c,AF_UNIX) < 0)       // 创建socket
         return REDIS_ERR;
-    if (redisSetBlocking(c,0) != REDIS_OK)
+    if (redisSetBlocking(c,0) != REDIS_OK)      // 设置非阻塞
         return REDIS_ERR;
 
     c->connection_type = REDIS_CONN_UNIX;
@@ -547,6 +557,7 @@ int redisContextConnectUnix(redisContext *c, const char *path, const struct time
     c->addrlen = sizeof(struct sockaddr_un);
     sa->sun_family = AF_UNIX;
     strncpy(sa->sun_path, path, sizeof(sa->sun_path) - 1);
+    // 建立连接
     if (connect(c->fd, (struct sockaddr*)sa, sizeof(*sa)) == -1) {
         if (errno == EINPROGRESS && !blocking) {
             /* This is ok. */

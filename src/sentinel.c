@@ -165,7 +165,7 @@ typedef struct instanceLink {
     int refcount; /* Number of sentinelRedisInstance owners. */
     // 初始化实例时，默认值是1
     int disconnected; /* Non-zero if we need to reconnect cc or pc. */
-    // 等待回复的命令数
+    // 等待回复的命令数（正在执行的命令数）
     int pending_commands; /* Number of commands sent waiting for a reply. */
     // 处理命令的连接
     redisAsyncContext *cc; /* Hiredis context for commands. */
@@ -227,6 +227,7 @@ typedef struct sentinelRedisInstance {
     mstime_t s_down_since_time; /* Subjectively down since time. */
     // 客观下线的时间
     mstime_t o_down_since_time; /* Objectively down since time. */
+    // 过了多久可以认为主观下线
     mstime_t down_after_period; /* Consider it down after that period. */
     // 最后一次接收到info回复的时间
     mstime_t info_refresh; /* Time at which we received INFO output from it. */
@@ -281,6 +282,7 @@ typedef struct sentinelRedisInstance {
                            the Sentinel that should perform the failover. If
                            this is a Sentinel, this is the runid of the Sentinel
                            that this Sentinel voted as leader. */
+    // 当前进行故障转移的leader sentinel epoch值
     uint64_t leader_epoch; /* Epoch of the 'leader' field. */
     // 故障转移开始时的epoch
     uint64_t failover_epoch; /* Epoch of the currently started failover. */
@@ -329,6 +331,7 @@ struct sentinelState {
     int announce_port; /* Port that is gossiped to other sentinels if
                            non zero. */
     unsigned long simfailure_flags; /* Failures simulation. */
+    // 控制client_reconfig_script是否执行
     int deny_scripts_reconfig; /* Allow SENTINEL SET ... to change script
                                   paths at runtime? */
 } sentinel;
@@ -358,6 +361,7 @@ typedef struct redisAeEvents {
     int reading, writing;
 } redisAeEvents;
 
+// 可读事件触发函数
 static void redisAeReadEvent(aeEventLoop *el, int fd, void *privdata, int mask) {
     ((void) el);
     ((void) fd);
@@ -367,6 +371,7 @@ static void redisAeReadEvent(aeEventLoop *el, int fd, void *privdata, int mask) 
     redisAsyncHandleRead(e->context);
 }
 
+// 可写事件触发函数
 static void redisAeWriteEvent(aeEventLoop *el, int fd, void *privdata, int mask) {
     ((void) el);
     ((void) fd);
@@ -1776,57 +1781,74 @@ char *sentinelHandleConfiguration(char **argv, int argc) {
         }
     } else if (!strcasecmp(argv[0], "down-after-milliseconds") && argc == 3) {
         /* down-after-milliseconds <name> <milliseconds> */
+        // 查找对应的master实例
         ri = sentinelGetMasterByName(argv[1]);
         if (!ri) return "No such master with specified name.";
+        // 将配置值设置到master实例中
         ri->down_after_period = atoi(argv[2]);
         if (ri->down_after_period <= 0)
             return "negative or zero time parameter.";
+        // 将该配置扩散到与master关联的实例（slave，其他监控master的sentinel）
         sentinelPropagateDownAfterPeriod(ri);
     } else if (!strcasecmp(argv[0], "failover-timeout") && argc == 3) {
         /* failover-timeout <name> <milliseconds> */
+        // 查找对应的master实例
         ri = sentinelGetMasterByName(argv[1]);
         if (!ri) return "No such master with specified name.";
+        // 设置实例的超时时间
         ri->failover_timeout = atoi(argv[2]);
         if (ri->failover_timeout <= 0)
             return "negative or zero time parameter.";
     } else if (!strcasecmp(argv[0], "parallel-syncs") && argc == 3) {
         /* parallel-syncs <name> <milliseconds> */
+        // 查找master实例
         ri = sentinelGetMasterByName(argv[1]);
         if (!ri) return "No such master with specified name.";
+        // 设置最大从库同步数
         ri->parallel_syncs = atoi(argv[2]);
     } else if (!strcasecmp(argv[0], "notification-script") && argc == 3) {
         /* notification-script <name> <path> */
+        // 获取对应的master实例
         ri = sentinelGetMasterByName(argv[1]);
         if (!ri) return "No such master with specified name.";
+        // 检查脚本是否可执行
         if (access(argv[2],X_OK) == -1)
             return "Notification script seems non existing or non executable.";
+        // 设置脚本路径到对应的实例中
         ri->notification_script = sdsnew(argv[2]);
     } else if (!strcasecmp(argv[0], "client-reconfig-script") && argc == 3) {
         /* client-reconfig-script <name> <path> */
+        // 获取对应的master实例
         ri = sentinelGetMasterByName(argv[1]);
         if (!ri) return "No such master with specified name.";
+        // 测试脚本是否可执行
         if (access(argv[2],X_OK) == -1)
             return "Client reconfiguration script seems non existing or "
                     "non executable.";
+        // 保存脚本路径
         ri->client_reconfig_script = sdsnew(argv[2]);
     } else if (!strcasecmp(argv[0], "auth-pass") && argc == 3) {
         /* auth-pass <name> <password> */
         ri = sentinelGetMasterByName(argv[1]);
         if (!ri) return "No such master with specified name.";
+        // 密码设置到对应的实例中
         ri->auth_pass = sdsnew(argv[2]);
     } else if (!strcasecmp(argv[0], "auth-user") && argc == 3) {
         /* auth-user <name> <username> */
         ri = sentinelGetMasterByName(argv[1]);
         if (!ri) return "No such master with specified name.";
+        // 用户名设置到对应的实例中
         ri->auth_user = sdsnew(argv[2]);
     } else if (!strcasecmp(argv[0], "current-epoch") && argc == 2) {
         /* current-epoch <epoch> */
         unsigned long long current_epoch = strtoull(argv[1],NULL, 10);
+        // 纪元设置到全局sentinel中
         if (current_epoch > sentinel.current_epoch)
             sentinel.current_epoch = current_epoch;
     } else if (!strcasecmp(argv[0], "myid") && argc == 2) {
         if (strlen(argv[1]) != CONFIG_RUN_ID_SIZE)
             return "Malformed Sentinel id in myid option.";
+        // 设置到全局sentinel中
         memcpy(sentinel.myid, argv[1],CONFIG_RUN_ID_SIZE);
     } else if (!strcasecmp(argv[0], "config-epoch") && argc == 3) {
         /* config-epoch <name> <epoch> */
@@ -1867,7 +1889,9 @@ char *sentinelHandleConfiguration(char **argv, int argc) {
                                                   atoi(argv[3]), ri->quorum, ri)) == NULL) {
                 return "Wrong hostname or port for sentinel.";
             }
+            // 设置sentinel的runid
             si->runid = sdsnew(argv[4]);
+            // 共享其他master绑定的当前sentinel的链接
             sentinelTryConnectionSharing(si);
         }
     } else if (!strcasecmp(argv[0], "rename-command") && argc == 4) {
@@ -2180,17 +2204,21 @@ static int instanceLinkNegotiateTLS(redisAsyncContext *context) {
  * is disconnected. Note that link->disconnected is true even if just
  * one of the two links (commands and pub/sub) is missing. */
 void sentinelReconnectInstance(sentinelRedisInstance *ri) {
+    // 检查当前是不是未建立连接
     if (ri->link->disconnected == 0) return;
+    // 检查端口号是不是无效的
     if (ri->addr->port == 0) return; /* port == 0 means invalid address. */
     instanceLink *link = ri->link;
     mstime_t now = mstime();
 
+    // 检查重连时机是不是小于ping周期
     if (now - ri->link->last_reconn_time < SENTINEL_PING_PERIOD) return;
+    // 设置最后一次尝试重连时间
     ri->link->last_reconn_time = now;
 
     /* Commands connection. */
     if (link->cc == NULL) {
-        // 建立连接
+        // 异步建立连接
         link->cc = redisAsyncConnectBind(ri->addr->ip, ri->addr->port,NET_FIRST_BIND_ADDR);
         if (!link->cc->err && server.tls_replication &&
             (instanceLinkNegotiateTLS(link->cc) == C_ERR)) {
@@ -4797,8 +4825,9 @@ void sentinelHandleDictOfRedisInstances(dict *instances) {
     while ((de = dictNext(di)) != NULL) {
         sentinelRedisInstance *ri = dictGetVal(de);
 
+        // 处理master实例
         sentinelHandleRedisInstance(ri);
-        if (ri->flags & SRI_MASTER) {
+        if (ri->flags & SRI_MASTER) {       // switch_to_promoted只有master实例才会执行
             sentinelHandleDictOfRedisInstances(ri->slaves);
             sentinelHandleDictOfRedisInstances(ri->sentinels);
             if (ri->failover_state == SENTINEL_FAILOVER_STATE_UPDATE_CONFIG) {

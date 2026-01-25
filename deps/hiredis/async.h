@@ -46,7 +46,7 @@ typedef struct redisCallback {
     struct redisCallback *next; /* simple singly linked list */
     redisCallbackFn *fn;
     int pending_subs;
-    void *privdata;
+    void *privdata;     // redisInstance实例
 } redisCallback;
 
 /* List of callbacks for either regular replies or pub/sub */
@@ -69,27 +69,43 @@ typedef struct redisAsyncContext {
     char *errstr;
 
     /* Not used by hiredis */
+    // link->cc->data = link
     void *data;
 
     /* Event library data and hooks */
     struct {
+        // aeEventLoop *loop
+        // e->loop = loop
+        // 关联了e：redisAeEvents
         void *data;
 
         /* Hooks that are called when the library expects to start
          * reading/writing. These functions should be idempotent. */
+
+        // redisAeAddRead
         void (*addRead)(void *privdata);
+
+        // redisAeDelRead
         void (*delRead)(void *privdata);
+
+        // redisAeAddWrite
         void (*addWrite)(void *privdata);
+
+        // redisAeDelWrite
         void (*delWrite)(void *privdata);
+
+        // redisAeCleanup
         void (*cleanup)(void *privdata);
         void (*scheduleTimer)(void *privdata, struct timeval tv);
     } ev;
 
     /* Called when either the connection is terminated due to an error or per
      * user request. The status is set accordingly (REDIS_OK, REDIS_ERR). */
+    // 回调函数：sentinelDisconnectCallback
     redisDisconnectCallback *onDisconnect;
 
     /* Called when the first write event was received. */
+    // 回调函数：sentinelLinkEstablishedCallback
     redisConnectCallback *onConnect;
 
     /* Regular command callbacks */

@@ -91,9 +91,13 @@ static dictType callbackDict = {
     callbackValDestructor
 };
 
+// 初始化redisAsyncContext
+//      c放到redisAsyncContext中
+//      去掉REDIS_CONNECTED标识
 static redisAsyncContext *redisAsyncInitialize(redisContext *c) {
     redisAsyncContext *ac;
 
+    // 按ac的结构，将c拷贝过去
     ac = realloc(c,sizeof(redisAsyncContext));
     if (ac == NULL)
         return NULL;
@@ -103,6 +107,7 @@ static redisAsyncContext *redisAsyncInitialize(redisContext *c) {
     /* The regular connect functions will always set the flag REDIS_CONNECTED.
      * For the async API, we want to wait until the first write event is
      * received up before setting this flag, so reset it here. */
+    // 取出已连接标识
     c->flags &= ~REDIS_CONNECTED;
 
     ac->err = 0;
@@ -140,21 +145,25 @@ static void __redisAsyncCopyError(redisAsyncContext *ac) {
     ac->errstr = c->errstr;
 }
 
+// 异步发起建立连接
 redisAsyncContext *redisAsyncConnectWithOptions(const redisOptions *options) {
     redisOptions myOptions = *options;
     redisContext *c;
     redisAsyncContext *ac;
 
     myOptions.options |= REDIS_OPT_NONBLOCK;
+    // 作用客户端发起建立连接请求（非阻塞）
     c = redisConnectWithOptions(&myOptions);
     if (c == NULL) {
         return NULL;
     }
+    // 初始化redisAsyncContext
     ac = redisAsyncInitialize(c);
     if (ac == NULL) {
         redisFree(c);
         return NULL;
     }
+    // 拷贝c的err到ac，如果存在的话
     __redisAsyncCopyError(ac);
     return ac;
 }
@@ -503,15 +512,17 @@ void redisProcessCallbacks(redisAsyncContext *ac) {
 static int __redisAsyncHandleConnect(redisAsyncContext *ac) {
     int completed = 0;
     redisContext *c = &(ac->c);
+    // 发起连接
     if (redisCheckConnectDone(c, &completed) == REDIS_ERR) {
         /* Error! */
         redisCheckSocketError(c);
         if (ac->onConnect) ac->onConnect(ac, REDIS_ERR);
         __redisAsyncDisconnect(ac);
         return REDIS_ERR;
-    } else if (completed == 1) {
+    } else if (completed == 1) {        // 连接成功，回调函数
         /* connected! */
         if (ac->onConnect) ac->onConnect(ac, REDIS_OK);
+        // 设置为已连接
         c->flags |= REDIS_CONNECTED;
         return REDIS_OK;
     } else {
@@ -522,6 +533,7 @@ static int __redisAsyncHandleConnect(redisAsyncContext *ac) {
 void redisAsyncRead(redisAsyncContext *ac) {
     redisContext *c = &(ac->c);
 
+    // 从socket读取数据到reader中
     if (redisBufferRead(c) == REDIS_ERR) {
         __redisAsyncDisconnect(ac);
     } else {
@@ -534,9 +546,12 @@ void redisAsyncRead(redisAsyncContext *ac) {
 /* This function should be called when the socket is readable.
  * It processes all replies that can be read and executes their callbacks.
  */
+
+// 可读事件处理
 void redisAsyncHandleRead(redisAsyncContext *ac) {
     redisContext *c = &(ac->c);
 
+    // 如果还没连接，建立连接
     if (!(c->flags & REDIS_CONNECTED)) {
         /* Abort connect was not successful. */
         if (__redisAsyncHandleConnect(ac) != REDIS_OK)
@@ -546,6 +561,7 @@ void redisAsyncHandleRead(redisAsyncContext *ac) {
             return;
     }
 
+    // 可读事件触发
     c->funcs->async_read(ac);
 }
 
@@ -557,19 +573,23 @@ void redisAsyncWrite(redisAsyncContext *ac) {
         __redisAsyncDisconnect(ac);
     } else {
         /* Continue writing when not done, stop writing otherwise */
+        // 写缓存区还有数据，注册可写事件（如果还没注册的话）
         if (!done)
             _EL_ADD_WRITE(ac);
         else
-            _EL_DEL_WRITE(ac);
+            _EL_DEL_WRITE(ac);      // 写缓冲区数据没了，删除可写事件
 
         /* Always schedule reads after writes */
+        // 注册可读事件
         _EL_ADD_READ(ac);
     }
 }
 
+// 处理可写事件
 void redisAsyncHandleWrite(redisAsyncContext *ac) {
     redisContext *c = &(ac->c);
 
+    // 如果还未连接，先连接
     if (!(c->flags & REDIS_CONNECTED)) {
         /* Abort connect was not successful. */
         if (__redisAsyncHandleConnect(ac) != REDIS_OK)
@@ -579,6 +599,7 @@ void redisAsyncHandleWrite(redisAsyncContext *ac) {
             return;
     }
 
+    // 触发可写事件
     c->funcs->async_write(ac);
 }
 
@@ -702,6 +723,7 @@ static int __redisAsyncCommand(redisAsyncContext *ac, redisCallbackFn *fn, void 
         else
             __redisPushCallback(&ac->replies,&cb);
     }
+
 
     __redisAppendCommand(c,cmd,len);
 

@@ -595,6 +595,7 @@ void redisReaderFree(redisReader *r) {
     free(r);
 }
 
+// 将buf数据读取到redisReader中
 int redisReaderFeed(redisReader *r, const char *buf, size_t len) {
     sds newbuf;
 

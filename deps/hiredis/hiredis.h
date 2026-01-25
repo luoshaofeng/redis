@@ -54,6 +54,7 @@ struct timeval; /* forward declaration */
 
 /* Connection may be disconnected before being free'd. The second bit
  * in the flags field is set when the context is connected. */
+// 不一定已经connect，只表示当前socket可操作
 #define REDIS_CONNECTED 0x2
 
 /* The async API might try to disconnect cleanly and flush the output
@@ -205,22 +206,26 @@ typedef struct redisContextFuncs {
 
 /* Context for a connection to Redis */
 typedef struct redisContext {
+    // 初始化 redisContextDefaultFuncs
     const redisContextFuncs *funcs;   /* Function table */
 
     int err; /* Error flags, 0 when there is no error */
     char errstr[128]; /* String representation of error when applicable */
+    // 文件描述符
     redisFD fd;
     int flags;
+    // 缓存命令，触发写事件时，从这里读取数据发送出去
     char *obuf; /* Write buffer */
+    // 由 redisReaderCreate 函数构建，触发读事件时，将socket数据读到这里
     redisReader *reader; /* Protocol reader */
-
+    // REDIS_CONN_TCP
     enum redisConnectionType connection_type;
     struct timeval *timeout;
 
     struct {
-        char *host;
-        char *source_addr;
-        int port;
+        char *host;     // host
+        char *source_addr;      // 源地址
+        int port;       // 端口号
     } tcp;
 
     struct {

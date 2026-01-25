@@ -294,6 +294,7 @@ static size_t bulklen(size_t len) {
     return 1+countDigits(len)+2+len+2;
 }
 
+// 将命令构造成RESP协议
 int redisvFormatCommand(char **target, const char *format, va_list ap) {
     const char *c = format;
     char *cmd = NULL; /* final command */
@@ -675,6 +676,7 @@ redisReader *redisReaderCreate(void) {
 static redisContext *redisContextInit(const redisOptions *options) {
     redisContext *c;
 
+    // 分配一块内存
     c = calloc(1, sizeof(*c));
     if (c == NULL)
         return NULL;
@@ -750,6 +752,7 @@ int redisReconnect(redisContext *c) {
 }
 
 redisContext *redisConnectWithOptions(const redisOptions *options) {
+    // 初始化redisContext
     redisContext *c = redisContextInit(options);
     if (c == NULL) {
         return NULL;
@@ -764,7 +767,9 @@ redisContext *redisConnectWithOptions(const redisOptions *options) {
       c->flags |= REDIS_NO_AUTO_FREE;
     }
 
+    // tcp连接
     if (options->type == REDIS_CONN_TCP) {
+        // 建立连接
         redisContextConnectBindTcp(c, options->endpoint.tcp.ip,
                                    options->endpoint.tcp.port, options->timeout,
                                    options->endpoint.tcp.source_addr);
@@ -879,8 +884,10 @@ int redisBufferRead(redisContext *c) {
     if (c->err)
         return REDIS_ERR;
 
+    // 从fd中读取数据
     nread = c->funcs->read(c, buf, sizeof(buf));
     if (nread > 0) {
+        // 将数据读到reader中
         if (redisReaderFeed(c->reader, buf, nread) != REDIS_OK) {
             __redisSetError(c, c->reader->err, c->reader->errstr);
             return REDIS_ERR;
@@ -908,6 +915,7 @@ int redisBufferWrite(redisContext *c, int *done) {
         return REDIS_ERR;
 
     if (sdslen(c->obuf) > 0) {
+        // 发送命令
         int nwritten = c->funcs->write(c);
         if (nwritten < 0) {
             return REDIS_ERR;
